@@ -144,12 +144,16 @@ func _make_talk_panel() -> void:
 	talk_panel.visible = false
 	add_child(talk_panel)
 
-## Dialogue with Bjørn: pick the Tike or the motorbike and it appears in the showroom.
+## Dialogue with Bjørn: pick a vehicle and it appears in the showroom. The helicopter goes to the hangar.
 func _show_talk(n) -> void:
 	for c in talk_buttons.get_children():
 		c.queue_free()
 	talk_text.text = "%s (car dealer):\n\"Hei! You're the first customer since the dead started walking. Everything here is free now. What do you fancy?\"" % n.npc_name
-	for opt in [["The Tike  (tough little 4x4, 54 km/h)", "tike"], ["The motorbike  (leans in the turns, 68 km/h)", "bike"], ["The ATV  (quad bike, 61 km/h)", "atv"], ["The sport sedan  (80s rocket, 108 km/h)", "sedan"], ["Nothing, thanks. Bye!", ""]]:
+	var opts := [["The Tike  (tough little 4x4, 54 km/h)", "tike"], ["The motorbike  (leans in the turns, 68 km/h)", "bike"], ["The ATV  (quad bike, 61 km/h)", "atv"], ["The sport sedan  (80s rocket, 108 km/h)", "sedan"]]
+	if Game.world.site_of("hangar"):
+		opts.append(["The helicopter  (waits in the hangar, 162 km/h)", "heli"])
+	opts.append(["Nothing, thanks. Bye!", ""])
+	for opt in opts:
 		var b := Button.new()
 		b.text = opt[0]
 		b.custom_minimum_size = Vector2(0, 42)
@@ -160,8 +164,12 @@ func _choose(n, kind: String) -> void:
 	if kind == "":
 		Game.player.end_talk()
 		return
-	Game.world.give_vehicle(kind)
-	Game.msg("%s: \"Good choice! It's waiting by the big door. Mind the zombies.\"" % n.npc_name, Color(1, 0.9, 0.6))
+	if kind == "heli":
+		Game.world.spawn_heli()
+		Game.msg("%s: \"Ha! Big spender. She's fuelled up in the hangar. Open the roof with the red button before you take off!\"" % n.npc_name, Color(1, 0.9, 0.6))
+	else:
+		Game.world.give_vehicle(kind)
+		Game.msg("%s: \"Good choice! It's waiting by the big door. Mind the zombies.\"" % n.npc_name, Color(1, 0.9, 0.6))
 	Sfx.play("craft")
 	Game.player.end_talk()
 

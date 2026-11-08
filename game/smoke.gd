@@ -146,7 +146,12 @@ func _process(dt: float) -> void:
 			pl.global_position = p
 			_look_at(st.pos + Vector3(0, 3, 0))
 	elif step == 11 and t > 22.3 and heli == null:
-		heli = w.spawn_heli()
+		w.hud._show_talk(w.npc)         # buy the helicopter from Bjørn through the dialogue
+		print("SMOKE bjorn offers heli=", w.hud.talk_buttons.get_child_count() == 6)
+		w.hud._choose(w.npc, "heli")
+		for v in w.vehicles:
+			if v.kind == "heli":
+				heli = v
 		pl.enter_vehicle(heli)
 		heli_y0 = heli.global_position.y
 		print("SMOKE hangar open=", w.hangar.open if w.hangar else "none", " in_hangar=", w.hangar != null and heli.global_position.distance_to(w.hangar.global_position) < 4.0)

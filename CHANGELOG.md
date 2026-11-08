@@ -1,5 +1,8 @@
 # Change log
 
+## Prototype v0.7.2 (2026-11-08)
+- Bjørn now also hands out the helicopter. It is delivered to the helipad in the hangar, not the showroom. Open the roof with the red button and fly out.
+
 ## Prototype v0.7.1 (2026-11-08)
 - Helicopter hangar on the outskirts (green on the map). A red button inside by the big door slides the two roof halves apart on rails, with a flashing orange beacon and motor sound, so the helicopter can fly straight out. Press again to close.
 - Developer mode now parks the helicopter on the hangar's helipad instead of in front of you. There is only one; asking again brings it back.

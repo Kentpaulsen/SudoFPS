@@ -1,5 +1,5 @@
 extends StaticBody3D
-## Bjørn, the car dealer. Talk to him (E) to get the Tike or the motorbike.
+## Bjørn, the car dealer. Talk to him (E) to get a vehicle; the helicopter is delivered to the hangar.
 
 var npc_name := "Bjørn"
 var head: Node3D
