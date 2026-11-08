@@ -1,0 +1,76 @@
+name: Build and publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.4.1
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    container:
+      image: barichello/godot-ci:4.4.1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install export templates
+        run: |
+          mkdir -p ~/.local/share/godot/export_templates/
+          if [ ! -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable ]; then
+            mv /root/.local/share/godot/export_templates/${GODOT_VERSION}.stable ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable
+          fi
+
+      - name: Import assets
+        run: godot --headless --import || true
+
+      - name: Smoke test
+        run: |
+          timeout 180 godot --headless -- --smoke 2>&1 | tee smoke.log
+          grep -q "SMOKE ok" smoke.log
+          ! grep -q "SCRIPT ERROR" smoke.log
+
+      - name: Export web
+        run: |
+          mkdir -p build/site/play
+          touch build/.gdignore
+          godot --headless --export-release "Web" build/site/play/index.html
+
+      - name: Export Windows
+        run: |
+          mkdir -p build/win
+          godot --headless --export-release "Windows Desktop" build/win/SudoFPS.exe
+          command -v zip >/dev/null || (apt-get update -qq && apt-get install -y -qq zip)
+          cd build/win && zip -q -9 ../site/SudoFPS-windows.zip SudoFPS.exe
+
+      - name: Landing page
+        run: |
+          cp web/landing/index.html build/site/index.html
+          cp CHANGELOG.md build/site/CHANGELOG.md
+          cp assets/preview_faces.png build/site/preview.png
+          rm -f build/site/play/*.import
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+
+  deploy:
+    needs: export
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

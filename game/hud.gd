@@ -1,0 +1,291 @@
+extends CanvasLayer
+## HUD, map, crafting panel and overlays.
+
+const PIECE_COL := Color(0.95, 0.9, 0.7)
+var canvas: Control
+var fx: ColorRect
+var fx_mat: ShaderMaterial
+var craft_panel: PanelContainer
+var death_panel: PanelContainer
+var msgs: Array = []          # [text, color, time]
+var show_help := false
+var show_stats := true
+var font: Font
+var _fps_t := 0.0
+var _fps := 0
+
+const HELP := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
+SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
+HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
+CRAFT  Q opens crafting. Sandbag = 1 fibre (bushes) + 2 stone (rocks)
+BUILD  Hold B, flick the mouse to pick a wall, let go. R rotates, left click places, right click exits
+MAP  M    Team ping  T    Open broadcast  Y (draws zombies)
+TEST KEYS  K +10 zombies   L +50 zombies   O remove zombies   I stats   U antidote   N +20 sandbags
+Esc lets go of the mouse. H hides this."""
+
+func _ready() -> void:
+	font = ThemeDB.fallback_font
+	fx = ColorRect.new()
+	fx.set_anchors_preset(Control.PRESET_FULL_RECT)
+	fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = """
+shader_type canvas_item;
+uniform sampler2D screen : hint_screen_texture, filter_linear_mipmap;
+uniform float amount = 0.0;
+uniform vec4 tint = vec4(0.0);
+void fragment() {
+	vec3 c = texture(screen, SCREEN_UV).rgb;
+	float g = dot(c, vec3(0.3, 0.59, 0.11));
+	c = mix(c, vec3(g) * vec3(0.8, 1.0, 0.75), amount * 0.8);
+	float v = distance(UV, vec2(0.5));
+	c *= 1.0 - smoothstep(0.3, 0.75, v) * amount * 0.9;
+	c = mix(c, tint.rgb, tint.a * (0.4 + 0.6 * smoothstep(0.2, 0.75, v)));
+	COLOR = vec4(c, 1.0);
+}
+"""
+	fx_mat = ShaderMaterial.new()
+	fx_mat.shader = sh
+	fx.material = fx_mat
+	add_child(fx)
+	canvas = Control.new()
+	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
+	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	canvas.draw.connect(_paint)
+	add_child(canvas)
+	_make_craft_panel()
+	_make_death_panel()
+	Game.message.connect(func(t, c): msgs.append([t, c, Time.get_ticks_msec() / 1000.0]))
+
+func _make_craft_panel() -> void:
+	craft_panel = PanelContainer.new()
+	craft_panel.set_anchors_preset(Control.PRESET_CENTER)
+	craft_panel.position = Vector2(-200, -140)
+	craft_panel.custom_minimum_size = Vector2(400, 0)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	craft_panel.add_child(box)
+	var t := Label.new()
+	t.text = "CRAFTING"
+	t.add_theme_font_size_override("font_size", 26)
+	box.add_child(t)
+	var r := Label.new()
+	r.text = "Sandbag = 1 fibre + 2 stone"
+	box.add_child(r)
+	for n in [1, 5, 20]:
+		var b := Button.new()
+		b.text = "Craft %d sandbag%s" % [n, "" if n == 1 else "s"]
+		b.custom_minimum_size = Vector2(0, 44)
+		b.pressed.connect(func(): Game.player.craft("sandbag", n))
+		box.add_child(b)
+	var close := Button.new()
+	close.text = "Close (Q)"
+	close.pressed.connect(func():
+		Game.player.craft_open = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+	box.add_child(close)
+	craft_panel.visible = false
+	add_child(craft_panel)
+
+func _make_death_panel() -> void:
+	death_panel = PanelContainer.new()
+	death_panel.set_anchors_preset(Control.PRESET_CENTER)
+	death_panel.position = Vector2(-170, -80)
+	death_panel.custom_minimum_size = Vector2(340, 0)
+	var box := VBoxContainer.new()
+	death_panel.add_child(box)
+	var t := Label.new()
+	t.text = "YOU DIED"
+	t.add_theme_font_size_override("font_size", 40)
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(t)
+	var b := Button.new()
+	b.text = "Respawn"
+	b.custom_minimum_size = Vector2(0, 50)
+	b.pressed.connect(func(): Game.player.respawn())
+	box.add_child(b)
+	death_panel.visible = false
+	add_child(death_panel)
+
+func _process(dt: float) -> void:
+	var pl = Game.player
+	if pl == null:
+		return
+	if Input.is_action_just_pressed("help"):
+		show_help = not show_help
+	if Input.is_action_just_pressed("debug_stats"):
+		show_stats = not show_stats
+	_fps_t += dt
+	if _fps_t > 0.5:
+		_fps_t = 0.0
+		_fps = int(Engine.get_frames_per_second())
+	craft_panel.visible = pl.craft_open
+	death_panel.visible = pl.dead
+	# screen effects
+	var amount = clampf((pl.zomb - 40.0) / 60.0, 0.0, 1.0) if Game.zombies_enabled else 0.0
+	var tint := Color(0, 0, 0, 0)
+	var st = Game.world.storm
+	if st and st.edge_distance(Vector2(pl.global_position.x, pl.global_position.z)) < 0.0:
+		tint = Color(0.45, 0.15, 0.7, 0.35)
+	if pl.head.global_position.y < 0.0:
+		tint = Color(0.05, 0.25, 0.4, 0.55)
+	if pl.hurt_flash > 0.0:
+		tint = tint.lerp(Color(0.7, 0.0, 0.0, 0.5), clampf(pl.hurt_flash, 0.0, 1.0))
+	fx_mat.set_shader_parameter("amount", amount)
+	fx_mat.set_shader_parameter("tint", tint)
+	fx.visible = amount > 0.0 or tint.a > 0.0
+	canvas.queue_redraw()
+
+# ---------------------------------------------------------------- drawing helpers
+func _text(pos: Vector2, s: String, size := 16, col := Color.WHITE, align := HORIZONTAL_ALIGNMENT_LEFT, width := -1.0) -> void:
+	canvas.draw_string(font, pos + Vector2(1, 1), s, align, width, size, Color(0, 0, 0, 0.7 * col.a))
+	canvas.draw_string(font, pos, s, align, width, size, col)
+
+func _bar(pos: Vector2, size: Vector2, frac: float, col: Color, label: String) -> void:
+	canvas.draw_rect(Rect2(pos, size), Color(0, 0, 0, 0.5))
+	canvas.draw_rect(Rect2(pos, Vector2(size.x * clampf(frac, 0.0, 1.0), size.y)), col)
+	_text(pos + Vector2(6, size.y - 5), label, 14)
+
+func _paint() -> void:
+	var pl = Game.player
+	if pl == null:
+		return
+	var vs := canvas.size
+	var c := vs / 2.0
+	var now := Time.get_ticks_msec() / 1000.0
+	# crosshair
+	if not pl.build_mode and not pl.dead:
+		var g = 4.0 if pl.aiming else 7.0
+		for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
+			canvas.draw_line(c + d * g, c + d * (g + 6.0), Color(1, 1, 1, 0.85), 2.0)
+		if pl.hit_marker > 0.0:
+			var hc = Color(1, 0.2, 0.15) if pl.head_marker else Color(1, 1, 1)
+			for d in [Vector2(1, 1), Vector2(-1, 1), Vector2(1, -1), Vector2(-1, -1)]:
+				canvas.draw_line(c + d * 6.0, c + d * 13.0, hc, 2.5)
+	# bars
+	_bar(Vector2(20, vs.y - 62), Vector2(240, 20), pl.hp / 100.0, Color(0.8, 0.2, 0.2), "Health %d" % ceili(pl.hp))
+	if Game.zombies_enabled:
+		_bar(Vector2(20, vs.y - 36), Vector2(240, 20), pl.zomb / 100.0, Color(0.4, 0.75, 0.25), "Zombification %d%%" % int(pl.zomb))
+	# weapon
+	var w: Dictionary = pl.W[pl.cur]
+	var ammo_s = "" if w.mode == "melee" else ("RELOADING" if pl.reloading > 0.0 else "%d / %d" % [pl.ammo[pl.cur], w.mag])
+	_text(Vector2(vs.x - 320, vs.y - 46), w.name, 22, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT, 300)
+	_text(Vector2(vs.x - 320, vs.y - 20), ammo_s, 18, Color(1, 0.9, 0.6), HORIZONTAL_ALIGNMENT_RIGHT, 300)
+	# inventory
+	var y := vs.y / 2.0 - 60.0
+	_text(Vector2(20, y), "MATERIALS", 14, Color(0.8, 0.85, 0.9))
+	for k in ["wood", "stone", "metal", "fibre", "sandbags"]:
+		y += 22.0
+		_text(Vector2(20, y), "%s  %d" % [k.capitalize(), pl.inv[k]], 16, PIECE_COL if k == "sandbags" else Color.WHITE)
+	# build mode
+	if pl.build_mode:
+		var p: Dictionary = Game.world.PIECES[pl.build_kind]
+		_text(Vector2(0, vs.y - 110), "BUILD: %s  (%d sandbags)" % [p.name, p.cost], 20, PIECE_COL, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+		_text(Vector2(0, vs.y - 86), "Left click place   R rotate   Mouse wheel change piece   Right click exit", 14, Color(0.85, 0.85, 0.85), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+	if pl.wheel_open:
+		_wheel(c, pl)
+	# minimap and sector
+	var mm := Rect2(Vector2(vs.x - 230, 20), Vector2(210, 210))
+	_map(mm, false)
+	_text(Vector2(mm.position.x, mm.end.y + 22), "Sector  %s" % Game.sector(pl.global_position), 18, Color(0.9, 1, 0.9), HORIZONTAL_ALIGNMENT_CENTER, mm.size.x)
+	var st = Game.world.storm
+	if st:
+		_text(Vector2(mm.position.x - 100, mm.end.y + 46), st.status(), 15, Color(0.85, 0.6, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, mm.size.x + 100)
+	if pl.map_open:
+		var s := minf(vs.x, vs.y) - 120.0
+		_map(Rect2(c - Vector2(s, s) / 2.0, Vector2(s, s)), true)
+	# stats
+	if show_stats:
+		var d = Game.world.director
+		var lines := ["FPS %d" % _fps, "Mode: %s" % ("Last Standing" if Game.mode == "last_standing" else "Zombie Royale")]
+		if d:
+			lines.append("Zombies %d  (chasing %d)" % [d.zombies.size(), d.active_count()])
+			lines.append("Kills %d   Hordes %d" % [d.kills, d.horde_count])
+		for i in lines.size():
+			_text(Vector2(20, 30 + i * 20), lines[i], 15, Color(0.85, 0.9, 0.95))
+	# messages
+	var my := 70.0
+	var keep: Array = []
+	for m in msgs:
+		var age: float = now - m[2]
+		if age < 6.0:
+			keep.append(m)
+	msgs = keep.slice(maxi(0, keep.size() - 5))
+	for m in msgs:
+		var a := clampf(6.0 - (now - m[2]), 0.0, 1.0)
+		var col: Color = m[1]
+		col.a = a
+		_text(Vector2(0, my), m[0], 18, col, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+		my += 26.0
+	# overlays
+	if show_help:
+		_panel_text(c, HELP)
+	elif not pl.captured() and not pl.dead and not pl.craft_open and not Game.smoke:
+		canvas.draw_rect(Rect2(Vector2.ZERO, vs), Color(0, 0, 0, 0.45))
+		_text(Vector2(0, c.y - 150), "CLICK TO PLAY", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+		_panel_text(c + Vector2(0, 40), HELP)
+
+func _panel_text(center: Vector2, s: String) -> void:
+	var lines := s.split("\n")
+	var h := lines.size() * 24.0 + 24.0
+	var wdt := 900.0
+	canvas.draw_rect(Rect2(center - Vector2(wdt / 2.0, h / 2.0), Vector2(wdt, h)), Color(0.05, 0.06, 0.07, 0.85))
+	for i in lines.size():
+		_text(Vector2(center.x - wdt / 2.0 + 20, center.y - h / 2.0 + 30 + i * 24), lines[i], 15)
+
+func _wheel(c: Vector2, pl) -> void:
+	var r := 120.0
+	var sel := -1
+	if pl.wheel_vec.length() > 40.0:
+		sel = posmod(roundi((pl.wheel_vec.angle() + PI / 2.0) / (PI / 2.0)), 4)
+	canvas.draw_circle(c, r + 20.0, Color(0, 0, 0, 0.45))
+	var dirs := [Vector2(0, -1), Vector2(1, 0), Vector2(0, 1), Vector2(-1, 0)]
+	for i in 4:
+		var p: Dictionary = Game.world.PIECES[i]
+		var pos: Vector2 = c + dirs[i] * r * 0.72
+		var col := PIECE_COL if i == sel else Color(0.75, 0.75, 0.75)
+		if i == sel:
+			canvas.draw_circle(pos, 46.0, Color(1, 0.9, 0.5, 0.25))
+		_text(pos + Vector2(-80, -2), p.name, 15, col, HORIZONTAL_ALIGNMENT_CENTER, 160)
+		_text(pos + Vector2(-80, 18), "%d bags" % p.cost, 13, col, HORIZONTAL_ALIGNMENT_CENTER, 160)
+	canvas.draw_line(c, c + pl.wheel_vec.limit_length(r * 0.5), Color(1, 1, 1, 0.6), 2.0)
+
+func _map(rect: Rect2, big: bool) -> void:
+	var w = Game.world
+	var pl = Game.player
+	canvas.draw_rect(rect.grow(3), Color(0, 0, 0, 0.6))
+	canvas.draw_texture_rect(w.map_texture, rect, false)
+	var n := int(Game.MAP_SIZE / Game.TILE)
+	var cell := rect.size.x / n
+	for i in n + 1:
+		var o := i * cell
+		canvas.draw_line(rect.position + Vector2(o, 0), rect.position + Vector2(o, rect.size.y), Color(0, 0, 0, 0.35), 1.0)
+		canvas.draw_line(rect.position + Vector2(0, o), rect.position + Vector2(rect.size.x, o), Color(0, 0, 0, 0.35), 1.0)
+	if big:
+		for i in n:
+			for j in n:
+				_text(rect.position + Vector2(i * cell + 4, j * cell + 16), "%s%d" % [char(65 + i), j + 1], 14, Color(1, 1, 1, 0.85))
+	var to_map := func(p: Vector3) -> Vector2:
+		return rect.position + Vector2((p.x + Game.MAP_SIZE / 2.0) / Game.MAP_SIZE, (p.z + Game.MAP_SIZE / 2.0) / Game.MAP_SIZE) * rect.size
+	var st = w.storm
+	if st:
+		for pair in [[st.center, st.radius, Color(0.75, 0.35, 1.0)], [st.next_c, st.next_r, Color(1, 1, 1, 0.7)]]:
+			if pair[1] <= 0.5 or (pair[2] == Color(1, 1, 1, 0.7) and st.state == "done"):
+				continue
+			var pts := PackedVector2Array()
+			for k in 7:
+				var a := deg_to_rad(60.0 * k)
+				pts.append(to_map.call(Vector3(pair[0].x + cos(a) * pair[1], 0, pair[0].y + sin(a) * pair[1])))
+			canvas.draw_polyline(pts, pair[2], 2.0)
+	if pl.ping_t > 0.0:
+		var pp: Vector2 = to_map.call(pl.ping_marker)
+		canvas.draw_circle(pp, 6.0, Color(0.4, 0.9, 1.0))
+	var pp: Vector2 = to_map.call(pl.global_position)
+	var f = Vector2(-sin(pl.yaw), -cos(pl.yaw))
+	var side := Vector2(f.y, -f.x)
+	var sz := 9.0 if big else 7.0
+	canvas.draw_colored_polygon(PackedVector2Array([pp + f * sz, pp - f * sz * 0.6 + side * sz * 0.6, pp - f * sz * 0.6 - side * sz * 0.6]), Color(1, 0.95, 0.3))
+	if not big:
+		for i in n:
+			_text(rect.position + Vector2(i * cell + cell / 2.0 - 4, -4), char(65 + i), 11, Color(1, 1, 1, 0.8))
+			_text(rect.position + Vector2(-12, i * cell + cell / 2.0 + 4), str(i + 1), 11, Color(1, 1, 1, 0.8))

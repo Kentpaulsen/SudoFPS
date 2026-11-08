@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SudoFPS</title>
+<style>
+  :root { --bg:#111417; --panel:#1b2026; --text:#e8ecef; --muted:#9aa5ae; --accent:#e8b93a; --red:#d2402e; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 40px 16px 60px; }
+  h1 { font-size: 56px; margin: 0; letter-spacing: -1px; }
+  .tag { color: var(--muted); margin: 4px 0 28px; }
+  .buttons { display:flex; gap:14px; flex-wrap:wrap; margin-bottom: 28px; }
+  a.btn { display:inline-block; padding:16px 26px; border-radius:10px; font-weight:700; text-decoration:none; font-size:18px; }
+  a.play { background:var(--accent); color:#1a1300; }
+  a.dl { background:var(--panel); color:var(--text); border:1px solid #2c343c; }
+  img { width:100%; border-radius:12px; display:block; margin-bottom: 28px; background:#2a2f35; }
+  section { background:var(--panel); border-radius:12px; padding:20px 22px; margin-bottom:18px; }
+  h2 { margin:0 0 10px; font-size:20px; }
+  table { border-collapse: collapse; width:100%; }
+  td { padding:4px 0; vertical-align: top; }
+  td:first-child { color:var(--accent); font-weight:600; width: 38%; padding-right: 12px; }
+  p.small { color:var(--muted); font-size:14px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>SudoFPS</h1>
+  <p class="tag">Prototype v0.1 &middot; offline sandbox &middot; built in Godot 4</p>
+  <div class="buttons">
+    <a class="btn play" href="play/">Play in browser</a>
+    <a class="btn dl" href="SudoFPS-windows.zip">Download for Windows</a>
+  </div>
+  <img src="preview.png" alt="The Tike and the Bike">
+  <section>
+    <h2>Controls</h2>
+    <table>
+      <tr><td>Move</td><td>W A S D, Shift sprint, Space jump, C crouch</td></tr>
+      <tr><td>Shoot</td><td>Left mouse, right mouse aims, R reloads</td></tr>
+      <tr><td>Weapons</td><td>1 Pistol, 2 UZI, 3 Shotgun, 4 Rifle, 5 Knife, 6 Bat (or mouse wheel)</td></tr>
+      <tr><td>Harvest</td><td>Hit trees, rocks and bushes with the knife or bat</td></tr>
+      <tr><td>Craft</td><td>Q. A sandbag is 1 fibre (bushes) + 2 stone (rocks)</td></tr>
+      <tr><td>Build</td><td>Hold B, flick the mouse towards a wall type, let go. R rotates, left click places, right click exits</td></tr>
+      <tr><td>Map and comms</td><td>M map, T team ping, Y open broadcast (draws zombies)</td></tr>
+      <tr><td>Test keys</td><td>K +10 zombies, L +50 zombies, O remove zombies, I stats, U antidote, N +20 sandbags</td></tr>
+    </table>
+  </section>
+  <section>
+    <h2>Modes in this prototype</h2>
+    <p><b>Last Standing:</b> the Hex Horizon storm shrinks the island, kills plants and hurts you outside the zone. No zombies.</p>
+    <p><b>Zombie Royale:</b> zombies idle around the island. Noise and sight wake them, screams pull in more, and hordes arrive over time. No storm.</p>
+  </section>
+  <p class="small">Windows: unzip and run SudoFPS.exe. Windows may warn about an unknown publisher; choose "More info" then "Run anyway".
+  <br>What changed: <a href="CHANGELOG.md">change log</a>.</p>
+</main>
+</body>
+</html>

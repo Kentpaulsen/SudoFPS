@@ -1,6 +1,6 @@
 # SudoFPS design decisions
 
-Agreed decisions so far. Brainstorm phase; nothing playable yet. Asset templates v0.2 in `assets/`.
+Agreed decisions so far. Prototype v0.1 is playable (offline sandbox). Asset templates v0.2 in `assets/`.
 Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitHub Actions).
 
 ## Platform and tech
@@ -109,8 +109,14 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - v0.2: LAN multiplayer.
 - v0.3: planks and floors, crowbar, crafting menu, crates with lock mini-game, objective items.
 
+## Prototype v0.1 notes (implementation choices to review in play-testing)
+- Island 384 m, map tiles 64 m (6 x 6). Starting kit: 20 sandbags so building can be tried at once.
+- Zombies: 110 at start, growing by ~8 per minute up to 260; hordes every 45-80 s from a named sector.
+- Zombie hit: 9 damage, +11% zombification. Health regenerates after 6 s without damage.
+- Storm: six phases, damage 1-8.5 HP/s depending on phase.
+- Vehicles are parked props only (no driving yet). Camera stick not built yet.
+
 ## Pending
-- Kent approves v0.1 scope and release plan.
 - Kent's review of this document.
 - Zombie Royale "without zombies": what is it?
 - Zombie faction win condition / Zombie Royale end condition.

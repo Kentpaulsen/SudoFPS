@@ -7,4 +7,10 @@ Multiplayer first-person shooter for browser and Windows, built in Godot 4. Proc
 - `assets/`: Blender templates (`.blend`), game-ready exports (`.glb`) and previews
 - `CHANGELOG.md`: what changed in each release
 
-Status: design phase. No playable build yet.
+Play: https://kentpaulsen.github.io/SudoFPS/ (browser version and Windows download, rebuilt on every push to main)
+
+Status: prototype v0.1, offline sandbox.
+
+- `game/`: the game scripts (Godot 4.4, GDScript)
+- `.github/workflows/build.yml`: smoke test, web and Windows export, publish to GitHub Pages
+- Run the automated test locally: `godot --headless -- --smoke`

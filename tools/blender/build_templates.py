@@ -125,7 +125,7 @@ def hide(ob, state=True):
     ob.hide_render = state
 
 def save(name, select_root=None):
-    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(BLEND_DIR, name + ".blend"), compress=True)
+    bpy.ops.wm.save_as_mainfile(filepath=os.path.join(BLEND_DIR, name + ".blend"), compress=False)
     # export everything, including hidden variants
     for ob in bpy.context.scene.objects:
         ob.hide_set(False)
