@@ -125,6 +125,9 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Jumping off a moving vehicle: the player rolls and takes a bit of damage. The vehicle carries on until it loses its speed.
 - Crashing into zombies or structures slows the vehicle faster than rolling to a stop.
 - Standing still on the Bike: zombies can pull you off.
+- Zombie count limited by performance: the game measures frame rate and stops spawning (and removes far-away idle zombies) when it drops below 30 fps; it lets the population grow again when there is headroom.
+- Quality settings (grass density, shadows, view distance) so low-end machines such as Chromebooks can hold 30 fps.
+- Recorded sounds: the game loads `assets/audio/<slot>_<nn>.wav` automatically and picks a random take; generated placeholders stay as fallback. Spec in `docs/audio.md`. New sound slots: zombie_attack, zombie_death, player_death, player_turn, player_land, tree_fall, footsteps by ground.
 
 ## Town (v0.3)
 - Each island gets a supermarket, a church and seven houses, all enterable. The ground under them is flattened and shown as dirt yard; buildings show on the map.
