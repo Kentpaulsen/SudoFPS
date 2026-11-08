@@ -38,6 +38,8 @@ var _last_vy := 0.0
 var _noise_t := 0.0
 var _crash_t := 0.0
 var _model_base := Vector3.ZERO
+var engine_pitch := 0.8
+var cam_offset := Vector3(0, 1.3, 5.0)
 
 func setup(glb: String, k: String) -> void:
 	kind = k
@@ -83,12 +85,22 @@ func setup(glb: String, k: String) -> void:
 	var ex: Node3D = model.find_child("EXIT_L", true, false)
 	if ex:
 		exit_local = to_local(ex.global_position)
-	if kind == "bike":
-		max_speed = 19.0
-		accel = 10.0
-		turn_rate = 2.4
-		leans = true
-	engine = _audio("engine_bike" if kind == "bike" else "engine_tike", -4.0)
+	var tune: Dictionary = {
+		"tike": {"max": 15.0, "accel": 8.0, "turn": 1.9, "engine": "engine_tike", "pitch": 0.8},
+		"bike": {"max": 19.0, "accel": 10.0, "turn": 2.4, "engine": "engine_bike", "pitch": 1.05, "lean": true},
+		"atv": {"max": 17.0, "accel": 9.0, "turn": 2.2, "engine": "engine_bike", "pitch": 0.8},
+		"sedan": {"max": 30.0, "accel": 7.5, "turn": 1.7, "engine": "engine_car", "pitch": 0.9, "brake": 20.0},
+	}.get(kind, {})
+	max_speed = tune.get("max", 15.0)
+	accel = tune.get("accel", 8.0)
+	turn_rate = tune.get("turn", 1.9)
+	brake = tune.get("brake", 16.0)
+	leans = tune.get("lean", false)
+	engine_pitch = tune.get("pitch", 0.8)
+	if kind == "sedan":
+		sw_axis = Vector3(0, 0.25, -0.45).normalized()
+		cam_offset = Vector3(0, 1.8, 6.5)
+	engine = _audio(tune.get("engine", "engine_tike"), -4.0)
 	rumble = _audio("rumble", -40.0)
 	skid = _audio("skid", -40.0)
 
@@ -206,7 +218,7 @@ func _sound(dt: float, throttle: float, grounded: bool) -> void:
 	elif s < 0.5:
 		target = 0.2 + absf(throttle) * 0.3
 	rpm = lerpf(rpm, target, minf(8.0 * dt, 1.0))
-	var base := 1.05 if kind == "bike" else 0.8
+	var base := engine_pitch
 	engine.pitch_scale = base * (0.6 + rpm * 1.1 + gear * 0.06)
 	engine.volume_db = -8.0 + absf(throttle) * 5.0 + rpm * 3.0
 	rumble.volume_db = lerpf(-40.0, -10.0, clampf(s / max_speed, 0.0, 1.0)) if grounded else -40.0

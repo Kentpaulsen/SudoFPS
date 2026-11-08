@@ -152,6 +152,17 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Norwegian road markings: yellow dashed centre line (3 m dash, 6 m gap), white solid edge lines, zebra crossings with blue crossing signs outside the supermarket, church and dealership.
 - Buildings: the ground inside every footprint is set just below the floor after all flattening, so no building is ever partly buried.
 
+## v0.7
+- Vehicles from Bjørn: Tike, motorbike, ATV (61 km/h) and a sport sedan (generic 1980s two-door, no brand badges, 108 km/h). The chosen one rolls out in the middle of the showroom; other unused vehicles there go back to stock.
+- Utility helicopter (generic military transport style, not named after a real model), developer mode only: spawn from the P panel. Space climbs, Shift/C descends, W/S fly, A/D turn; rotor spins up in 2 s; draws zombies from 110 m.
+- Bodycam view (Settings > Gameplay): chest-height camera with wide lens distortion, step bounce and sway, grain, vignette and a REC overlay. Night vision on Z, with or without bodycam.
+- Zombies now look like dead ordinary people: eight outfits including Bjørn-type suits with ties, moustaches, cracked glasses, grey hair; noses, ears, brows, sunken eyes, teeth.
+- Fix: church pews faced the wrong way (backrests towards the altar).
+
+## Multiplayer with join codes (requested 2026-11-08, needs Kent's decision)
+- Browser players cannot connect to each other directly without a small online server that pairs them by code. Options: (A) code-based peer-to-peer (one player hosts in their browser; a tiny pairing server on the homelab matches codes), (B) dedicated game server on the homelab with room codes (the agreed long-term plan), (C) LAN only with the Windows version (no server, join by IP).
+- Every system needs network syncing (players, zombies, vehicles, doors, building, storm, time of day). Proposed staging: 1) see each other, move, shoot, zombies and vehicles synced; 2) building, crafting, storm, items.
+
 ## v0.6
 - Doors: the church tower has a wooden double door, every house a front door. E opens and closes them. Closed doors block zombies too, so a house is a place to hide (zombies spawned inside stay inside until someone opens up).
 - Bjørn the car dealer stands in the dealership. Talk to him (E) and pick the Tike or the motorbike; it appears at the showroom door. One of each: asking again brings yours back if nobody is driving it. Without a dealership the vehicles are parked near the spawn as before.

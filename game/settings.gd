@@ -11,7 +11,7 @@ const PRESETS := {
 const DEFAULTS := {
 	"preset": "Medium", "render_scale": 0.8, "shadows": true, "grass": 0.6, "view_distance": 250.0,
 	"fullscreen": false, "vsync": true, "max_fps": 0, "fov": 75.0,
-	"sensitivity": 1.0, "invert_y": false, "master_volume": 0.9, "day_length_min": 14.0,
+	"sensitivity": 1.0, "invert_y": false, "bodycam": false, "master_volume": 0.9, "day_length_min": 14.0,
 }
 ## Actions the player can rebind, in the order shown in the Controls tab.
 const BINDABLE := [
@@ -19,7 +19,7 @@ const BINDABLE := [
 	["jump", "Jump / brake"], ["sprint", "Sprint"], ["crouch", "Crouch"], ["reload", "Reload / rotate piece"],
 	["interact", "Use / enter vehicle"], ["build", "Build wheel"], ["craft", "Crafting"], ["map", "Map"],
 	["ping", "Team ping"], ["broadcast", "Open broadcast"], ["horn", "Horn"], ["camera", "Vehicle camera"],
-	["help", "Help"], ["dev", "Developer panel"],
+	["help", "Help"], ["dev", "Developer panel"], ["nightvision", "Night vision"],
 ]
 
 var v := {}

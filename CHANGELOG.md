@@ -1,5 +1,12 @@
 # Change log
 
+## Prototype v0.7.0 (2026-11-08)
+- New vehicles from Bjørn: an ATV and an 80s-style sport sedan (108 km/h). Your pick rolls out in the showroom.
+- Helicopter in developer mode (P > Spawn helicopter): Space climbs, Shift/C descends, W/S fly, A/D turn.
+- Bodycam view in Settings > Gameplay: wide lens, step bounce, grain and a REC overlay. Night vision on Z.
+- Zombies look like dead ordinary people: suits and ties like Bjørn, moustaches, cracked glasses, grey hair, sunken eyes.
+- Church pews now face the altar.
+
 ## Prototype v0.6.0 (2026-11-08)
 - Church door fixed: the tower entrance was accidentally walled up. It now has a wooden double door.
 - Doors you can open and close with E on the church and every house. Closed doors keep zombies out (and in).

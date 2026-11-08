@@ -67,6 +67,8 @@ var interact_target = null
 var interact_kind := ""
 var interact_label := ""
 var talk_open := false
+var nightvision := false
+var _cam_bob := 0.0
 var talk_npc = null
 var third_person := false
 var sprinting := false
@@ -252,6 +254,9 @@ func _actions(cap: bool) -> void:
 		return
 	if Input.is_action_just_pressed("map"):
 		map_open = not map_open
+	if Input.is_action_just_pressed("nightvision"):
+		nightvision = not nightvision
+		Sfx.play("click", -6.0, 0.6 if nightvision else 0.5)
 	_find_interact()
 	if Input.is_action_just_pressed("interact"):
 		if vehicle:
@@ -652,13 +657,21 @@ func _camera(dt: float) -> void:
 	cam.far = Settings.get_v("view_distance") + 150.0
 	var want := Vector3.ZERO
 	if vehicle and third_person:
-		want = Vector3(0, 1.3, 5.0)
+		want = vehicle.cam_offset
 		var from := head.global_position
 		var to := head.global_transform * want
 		var q := PhysicsRayQueryParameters3D.create(from, to, Game.L_WORLD | Game.L_STRUCT, [get_rid(), vehicle.get_rid()])
 		var hit := get_world_3d().direct_space_state.intersect_ray(q)
 		if hit:
 			want = want * maxf(from.distance_to(hit.position) - 0.3, 0.5) / want.length()
+	if Settings.get_v("bodycam") and vehicle == null:
+		# chest-mounted camera: lower, wider, bounces and sways with every step
+		var moving := Vector2(velocity.x, velocity.z).length()
+		_cam_bob += dt * (6.0 + moving * 1.6)
+		var k2 := clampf(moving / 5.0, 0.0, 1.5)
+		want += Vector3(sin(_cam_bob * 0.5) * 0.03 * k2, -0.22 + absf(sin(_cam_bob)) * 0.05 * k2, 0.05)
+		cam.rotation.z += sin(_cam_bob * 0.5) * 0.025 * k2
+		cam.fov = lerpf(cam.fov, (fov + 14.0) * (0.7 if aiming else 1.0), minf(12.0 * dt, 1.0))
 	cam.position = cam.position.lerp(want, minf(10.0 * dt, 1.0))
 
 # ---------------------------------------------------------------- health
@@ -708,7 +721,7 @@ func _find_interact() -> void:
 			best = d
 			interact_target = v
 			interact_kind = "vehicle"
-			interact_label = "drive the %s" % ("Tike" if v.kind == "tike" else "motorbike")
+			interact_label = "get in the %s" % {"tike": "Tike", "bike": "motorbike", "atv": "ATV", "sedan": "sport sedan", "heli": "helicopter"}.get(v.kind, v.kind)
 	for door in w.doors:
 		var d: float = door.centre().distance_to(global_position + Vector3(0, 1.0, 0))
 		if d < 2.3 and d < best:

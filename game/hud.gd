@@ -9,6 +9,8 @@ var craft_panel: PanelContainer
 var death_panel: PanelContainer
 var dev_panel: PanelContainer
 var talk_panel: PanelContainer
+var cam_fx: ColorRect
+var cam_mat: ShaderMaterial
 var talk_text: Label
 var talk_buttons: VBoxContainer
 var msgs: Array = []          # [text, color, time]
@@ -45,6 +47,42 @@ void fragment() {
 	fx_mat.shader = sh
 	fx.material = fx_mat
 	add_child(fx)
+	cam_fx = ColorRect.new()
+	cam_fx.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cam_fx.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var csh := Shader.new()
+	csh.code = """
+shader_type canvas_item;
+uniform sampler2D screen : hint_screen_texture, filter_linear_mipmap;
+uniform float distort = 0.0;
+uniform float nv = 0.0;
+uniform float time = 0.0;
+float rnd(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + time * 37.0) * 43758.5453); }
+void fragment() {
+	vec2 c = SCREEN_UV - 0.5;
+	float r2 = dot(c, c);
+	vec2 uv = 0.5 + c * (1.0 - distort * 0.32 * r2);           // barrel lens
+	float ca = distort * 0.006 * r2 * 4.0;
+	vec3 col = vec3(texture(screen, uv + c * ca).r, texture(screen, uv).g, texture(screen, uv - c * ca).b);
+	float g = dot(col, vec3(0.3, 0.59, 0.11));
+	col = mix(col, vec3(g), distort * 0.25);
+	col = (col - 0.5) * (1.0 + distort * 0.15) + 0.5;
+	if (nv > 0.5) {
+		float l = clamp(pow(g * 3.2, 0.9) + 0.03, 0.0, 1.2);
+		col = vec3(0.12, 1.0, 0.28) * l;
+		col *= 0.92 + 0.08 * sin(SCREEN_UV.y * 900.0);
+	}
+	float grain = (rnd(SCREEN_UV * 731.0) - 0.5) * (0.06 * distort + 0.12 * nv);
+	col += grain;
+	col *= 1.0 - smoothstep(0.18, 0.55, r2) * (0.75 * distort + 0.4 * nv);
+	COLOR = vec4(col, 1.0);
+}
+"""
+	cam_mat = ShaderMaterial.new()
+	cam_mat.shader = csh
+	cam_fx.material = cam_mat
+	cam_fx.visible = false
+	add_child(cam_fx)
 	canvas = Control.new()
 	canvas.set_anchors_preset(Control.PRESET_FULL_RECT)
 	canvas.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -111,7 +149,7 @@ func _show_talk(n) -> void:
 	for c in talk_buttons.get_children():
 		c.queue_free()
 	talk_text.text = "%s (car dealer):\n\"Hei! You're the first customer since the dead started walking. Everything here is free now. What do you fancy?\"" % n.npc_name
-	for opt in [["The Tike  (tough little 4x4, 54 km/h)", "tike"], ["The motorbike  (fast, leans in the turns, 68 km/h)", "bike"], ["Nothing, thanks. Bye!", ""]]:
+	for opt in [["The Tike  (tough little 4x4, 54 km/h)", "tike"], ["The motorbike  (leans in the turns, 68 km/h)", "bike"], ["The ATV  (quad bike, 61 km/h)", "atv"], ["The sport sedan  (80s rocket, 108 km/h)", "sedan"], ["Nothing, thanks. Bye!", ""]]:
 		var b := Button.new()
 		b.text = opt[0]
 		b.custom_minimum_size = Vector2(0, 42)
@@ -157,6 +195,13 @@ func _make_dev_panel() -> void:
 		bt.text = b[0]
 		bt.pressed.connect(func(): if Game.world.director: Game.world.director.stress(b[1]))
 		row.add_child(bt)
+	var heli := Button.new()
+	heli.text = "Spawn helicopter"
+	heli.pressed.connect(func():
+		Game.world.spawn_heli()
+		Game.player.dev_open = false
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+	box.add_child(heli)
 	var clr := Button.new()
 	clr.text = "Remove zombies"
 	clr.pressed.connect(func(): if Game.world.director: Game.world.director.clear_all())
@@ -219,6 +264,11 @@ func _process(dt: float) -> void:
 	fx_mat.set_shader_parameter("amount", amount)
 	fx_mat.set_shader_parameter("tint", tint)
 	fx.visible = amount > 0.0 or tint.a > 0.0
+	var body: bool = Settings.get_v("bodycam") and pl.vehicle == null
+	cam_fx.visible = body or pl.nightvision
+	cam_mat.set_shader_parameter("distort", 1.0 if body else 0.0)
+	cam_mat.set_shader_parameter("nv", 1.0 if pl.nightvision else 0.0)
+	cam_mat.set_shader_parameter("time", fmod(Time.get_ticks_msec() / 1000.0, 100.0))
 	canvas.queue_redraw()
 
 # ---------------------------------------------------------------- drawing helpers
@@ -312,6 +362,11 @@ func _paint() -> void:
 		col.a = a
 		_text(Vector2(0, my), m[0], 18, col, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
 		my += 26.0
+	if Settings.get_v("bodycam") and pl.vehicle == null:
+		var blink := int(now * 2.0) % 2 == 0
+		if blink:
+			canvas.draw_circle(Vector2(vs.x / 2.0 - 170, 32), 7.0, Color(0.9, 0.1, 0.1))
+		_text(Vector2(vs.x / 2.0 - 155, 38), "REC   BODYCAM 01   DAY 1  %s%s" % [Game.world.clock(), "   NV" if pl.nightvision else ""], 16, Color(1, 1, 1, 0.9))
 	# overlays
 	if show_help:
 		_panel_text(c, Game.HELP_TEXT)

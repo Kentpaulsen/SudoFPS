@@ -741,17 +741,23 @@ func _doors_for(st: Dictionary) -> void:
 		d.setup(sp[1], sp[2], sp[3], sp[4])
 		doors.append(d)
 
-## Bjørn hands out vehicles. One of each kind: asking again brings it back to the showroom.
+const VEHICLE_GLB := {"tike": "res://assets/glb/vehicle_tike.glb", "bike": "res://assets/glb/vehicle_bike.glb",
+	"atv": "res://assets/glb/vehicle_atv.glb", "sedan": "res://assets/glb/vehicle_sedan.glb"}
+
+## Bjørn hands out vehicles. The chosen one rolls out in the middle of the showroom, facing the big door;
+## any other unused vehicle standing in the showroom goes back to stock. One of each kind in the world.
 func give_vehicle(kind: String) -> Node3D:
 	var dealer = site_of("dealership")
-	var marks: Dictionary = Game.asset(BUILDINGS.dealership.glb).markers if dealer else {}
-	var mark := "SPAWN_TIKE" if kind == "tike" else "SPAWN_BIKE"
 	var p := Vector3.ZERO
 	var yaw := 0.0
-	if dealer and marks.has(mark):
+	if dealer:
 		var b := Basis(Vector3.UP, dealer.rot * PI / 2.0)
-		p = dealer.pos + b * (marks[mark] as Transform3D).origin + Vector3(0, 0.15, 0)
+		p = dealer.pos + b * Vector3(0.0, 0.2, 1.5)
 		yaw = dealer.rot * PI / 2.0
+		for v in vehicles.duplicate():
+			if v.driver == null and v.kind != kind and (dealer.rect as Rect2).has_point(Vector2(v.global_position.x, v.global_position.z)):
+				vehicles.erase(v)
+				v.queue_free()
 	else:
 		p = player.global_position + Vector3(4, 0.5, 0)
 		p.y = height_at(p.x, p.z) + 0.3
@@ -762,15 +768,29 @@ func give_vehicle(kind: String) -> Node3D:
 			v.speed = 0.0
 			v.velocity = Vector3.ZERO
 			return v
-	var glb := "res://assets/glb/vehicle_tike.glb" if kind == "tike" else "res://assets/glb/vehicle_bike.glb"
 	var v := CharacterBody3D.new()
 	v.set_script(load("res://game/vehicle.gd"))
 	add_child(v)
-	v.setup(glb, kind)
+	v.setup(VEHICLE_GLB[kind], kind)
 	v.global_position = p
 	v.rotation.y = yaw
 	vehicles.append(v)
 	return v
+
+## Developer mode: a helicopter appears 14 m in front of the player.
+func spawn_heli() -> Node3D:
+	var fwd: Vector3 = -player.global_transform.basis.z
+	var p: Vector3 = player.global_position + Vector3(fwd.x, 0, fwd.z).normalized() * 14.0
+	p.y = height_at(p.x, p.z) + 0.5
+	var h := CharacterBody3D.new()
+	h.set_script(load("res://game/heli.gd"))
+	add_child(h)
+	h.setup("res://assets/glb/vehicle_heli.glb")
+	h.global_position = p
+	h.rotation.y = player.rotation.y + PI
+	vehicles.append(h)
+	Game.msg("Helicopter ready. E to get in: Space climb, Shift/C descend, W/S fly, A/D turn", Color(0.8, 0.95, 1.0))
+	return h
 
 func _parking(st: Dictionary, b: Dictionary, asphalt: Material, paint: Material, rng: RandomNumberGenerator) -> void:
 	var r: Rect2 = st.park
@@ -1759,5 +1779,5 @@ func _vehicles(spawn: Vector3) -> void:
 		return
 	for kind in ["tike", "bike"]:
 		var v := give_vehicle(kind)
-		v.global_position = spawn + (Vector3(5, 0.3, -4) if kind == "tike" else Vector3(8, 0.3, -1))
+		v.global_position = spawn + (Vector3(5, 0.3, -4) if kind == "tike" else Vector3(9, 0.3, -1))
 		v.global_position.y = height_at(v.global_position.x, v.global_position.z) + 0.2

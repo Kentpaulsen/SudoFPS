@@ -11,9 +11,9 @@ const SLOTS := {
 	"pistol": "pistol", "uzi": "uzi", "rifle": "rifle", "shotgun": "shotgun", "swing": "swing", "hit": "hit",
 	"chop": "chop", "rock": "rock", "build": "build", "craft": "craft", "ping": "ping", "crackle": "crackle",
 	"horn": "horn", "land": "land_vehicle", "crash": "crash", "start": "start",
-	"engine_tike": "engine_tike", "engine_bike": "engine_bike", "rumble": "rumble", "skid": "skid",
+	"engine_tike": "engine_tike", "engine_bike": "engine_bike", "engine_car": "engine_car", "rotor": "rotor", "rumble": "rumble", "skid": "skid",
 }
-const LOOPS := ["engine_tike", "engine_bike", "rumble", "skid"]
+const LOOPS := ["engine_tike", "engine_bike", "engine_car", "rotor", "rumble", "skid"]
 var recorded := {}      # event name -> Array of streams
 var streams := {}
 var _pool3d: Array[AudioStreamPlayer3D] = []
@@ -29,6 +29,8 @@ func _ready() -> void:
 	streams.shotgun = _shot(1.1, 0.32, 1.0, 52.0, 0.20)
 	streams.engine_tike = _engine(48.0, 0.85, 0.15, 9.0)
 	streams.engine_bike = _engine(88.0, 0.45, 0.45, 4.0)
+	streams.engine_car = _engine(66.0, 0.55, 0.30, 6.0)
+	streams.rotor = _rotor()
 	streams.rumble = _noise_loop(0.04, 0.6)
 	streams.skid = _noise_loop(0.55, 0.5, 1800.0)
 	streams.horn = _horn()
@@ -162,6 +164,22 @@ func _engine(base_hz: float, thump: float, buzz: float, decay: float) -> AudioSt
 	var w := _wav(s)
 	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	w.loop_begin = 0
+	w.loop_end = n
+	return w
+
+## Helicopter: blade-pass thump (about 5 per second at full rpm, scaled by pitch) over turbine whine.
+func _rotor() -> AudioStreamWAV:
+	var n := int(RATE * 0.8)
+	var s := PackedFloat32Array()
+	s.resize(n)
+	var y := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var ph := fmod(t * 5.0, 1.0)
+		y += 0.06 * (randf_range(-1, 1) - y)
+		s[i] = (y * 5.0 * exp(-ph * 6.0) + sin(TAU * 880.0 * t) * 0.05 + sin(TAU * 1320.0 * t) * 0.03) * 0.9
+	var w := _wav(s)
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	w.loop_end = n
 	return w
 

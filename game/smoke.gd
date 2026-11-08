@@ -5,6 +5,9 @@ var t := 0.0
 var step := 0
 var shots := ""
 var max_air := 0.0
+var heli = null
+var heli_y0 := 0.0
+var heli_done := false
 var menu = null
 var start_pos := Vector3.ZERO
 var shot_air := false
@@ -42,8 +45,8 @@ func _process(dt: float) -> void:
 		return
 	if step == 0 and t > 1.0:
 		step = 1
-		w.give_vehicle("tike")
-		w.give_vehicle("bike")
+		for kv in ["atv", "sedan", "bike", "tike"]:
+			w.give_vehicle(kv)
 		if w.doors.size() > 0:
 			w.doors[0].toggle()
 		print("SMOKE vehicles=", w.vehicles.size(), " doors=", w.doors.size(), " npc=", w.npc != null)
@@ -140,7 +143,23 @@ func _process(dt: float) -> void:
 			p.y = w.height_at(p.x, p.z) + 0.2
 			pl.global_position = p
 			_look_at(st.pos + Vector3(0, 3, 0))
-	elif step == 11 and t > 23.5:
+	elif step == 11 and t > 22.3 and heli == null:
+		heli = w.spawn_heli()
+		pl.enter_vehicle(heli)
+		heli_y0 = heli.global_position.y
+		Input.action_press("jump")
+		Input.action_press("move_forward")
+	elif step == 11 and heli != null and t > 27.0 and not heli_done:
+		heli_done = true
+		Input.action_release("jump")
+		Input.action_release("move_forward")
+		print("SMOKE heli climbed=%.1f speed=%.1f" % [heli.global_position.y - heli_y0, heli.speed])
+		pl.exit_vehicle()
+		var st0 = w.sites[0]
+		var p0: Vector3 = st0.pos + Vector3(30, 0, 30)
+		p0.y = w.height_at(p0.x, p0.z) + 0.2
+		pl.global_position = p0
+	elif step == 11 and t > 27.2 and heli_done:
 		step = 12
 		_shot("08_town")
 		var church = null
@@ -150,21 +169,21 @@ func _process(dt: float) -> void:
 		if church:
 			pl.global_position = church.pos + Basis(Vector3.UP, church.rot * PI / 2.0) * Vector3(0, 0.3, 6.0)
 			_look_at(church.pos + Basis(Vector3.UP, church.rot * PI / 2.0) * Vector3(0, 2.0, -8.0))
-	elif step == 12 and t > 25.0:
+	elif step == 12 and t > 29.0:
 		step = 13
 		_shot("09_church_inside")
 		var c: Vector3 = w.sites[0].pos
 		pl.set_physics_process(false)
 		pl.global_position = c + Vector3(-60, 55, 60)
 		_look_at(c)
-	elif step == 13 and t > 25.8 and t < 26.0:
+	elif step == 13 and t > 29.8 and t < 30.0:
 		_shot("10_aerial")
 		var dl = w.site_of("dealership")
 		if dl:
 			var b := Basis(Vector3.UP, dl.rot * PI / 2.0)
 			pl.global_position = dl.pos + b * Vector3(-6, 0, 22) + Vector3(0, 0.2, 0)
 			_look_at(dl.pos + Vector3(0, 2, 0))
-	elif step == 13 and t > 27.0:
+	elif step == 13 and t > 31.0:
 		_shot("11_dealership")
 		step = 14
 		Settings.set_preset("Low")
@@ -176,7 +195,7 @@ func _process(dt: float) -> void:
 			pp.y = w.height_at(pp.x, pp.z) + 0.1
 			pl.global_position = pp
 			_look_at(lp - Vector3(0, 4, 0))
-	elif step == 14 and t > 29.0:
+	elif step == 14 and t > 33.0:
 		_shot("12_night")
 		step = 15
 		for c in w.get_children():
@@ -185,12 +204,12 @@ func _process(dt: float) -> void:
 		menu.open_menu()
 		menu.panel.visible = false
 		menu.settings.visible = true
-	elif step == 15 and t > 30.5:
+	elif step == 15 and t > 34.5:
 		print("SMOKE paused=", get_tree().paused, " mode=", Game.mode)
 		_shot("13_settings")
 		menu.resume()
 		step = 16
-	elif step == 16 and t > 31.0:
+	elif step == 16 and t > 35.0:
 		var d = w.director
 		print("SMOKE fps=", Engine.get_frames_per_second(), " zombies=", d.zombies.size() if d else 0,
 			" chasing=", d.active_count() if d else 0, " hp=", pl.hp, " pieces=", w.pieces.size(),
@@ -206,38 +225,47 @@ func _quick() -> void:
 	pl.set_physics_process(false)
 	if step == 0 and t > 1.0:
 		step = 1
-		var n = w.npc
-		var b: Basis = n.global_transform.basis
-		pl.global_position = n.global_position + b * Vector3(0.6, 0, 2.6)
-		_look_at(n.global_position + Vector3(0, 1.5, 0))
-		pl.equip(4)
-		pl.talk_to(n)
+		var dl = w.site_of("dealership")
+		var b := Basis(Vector3.UP, dl.rot * PI / 2.0)
+		w.give_vehicle("sedan")
+		pl.global_position = dl.pos + b * Vector3(3.5, 0.1, 13.0)
+		_look_at(dl.pos + b * Vector3(0, 0.8, 1.5))
+		pl.equip(3)
 	elif step == 1 and t > 2.5:
 		step = 2
-		_shot("30_npc")
-		pl.end_talk()
-		var ch = w.site_of("church")
-		var b := Basis(Vector3.UP, ch.rot * PI / 2.0)
-		pl.global_position = ch.pos + b * Vector3(1.5, 0.1, 19.0)
-		_look_at(ch.pos + b * Vector3(0, 3.0, 12.0))
+		_shot("40_sedan")
+		var dl = w.site_of("dealership")
+		var b := Basis(Vector3.UP, dl.rot * PI / 2.0)
+		w.give_vehicle("atv")
+		pl.global_position = dl.pos + b * Vector3(-2.5, 0.1, 6.0)
+		_look_at(dl.pos + b * Vector3(0, 0.5, 1.5))
 	elif step == 2 and t > 4.0:
 		step = 3
-		_shot("31_church")
-		w.doors[0].toggle()
-		w.doors[1].toggle()
-	elif step == 3 and t > 6.0:
+		_shot("41_atv")
+		var h = w.spawn_heli()
+		var fwd: Vector3 = -pl.global_transform.basis.z
+		pl.global_position = h.global_position + Vector3(-fwd.x, 0, -fwd.z).normalized() * 18.0 + Vector3(4, 1, 0)
+		_look_at(h.global_position + Vector3(0, 1.5, 0))
+	elif step == 3 and t > 5.5:
 		step = 4
-		_shot("32_church_open")
+		_shot("42_heli")
 		if w.director:
 			w.director.clear_all()
+			var fwd: Vector3 = -pl.global_transform.basis.z
 			for k in 7:
-				var a := -0.6 + k * 0.2
-				var fwd: Vector3 = -pl.global_transform.basis.z
-				var p: Vector3 = pl.global_position + fwd.rotated(Vector3.UP, a) * (5.0 + k % 3 * 2.0)
+				var p: Vector3 = pl.global_position + fwd.rotated(Vector3.UP, -0.5 + k * 0.17) * (4.5 + (k % 3) * 2.5)
 				p.y = w.height_at(p.x, p.z)
-				w.director.spawn(p, true)
-	elif step == 4 and t > 7.6:
+				var z = w.director.spawn(p, false)
+				z.rotation.y = pl.rotation.y
+	elif step == 4 and t > 6.5:
 		step = 5
-		_shot("33_zombies")
+		_shot("43_zombies")
+		Settings.v["bodycam"] = true
+		w.day_t = 0.9
+		pl.nightvision = true
+	elif step == 5 and t > 8.0:
+		step = 6
+		_shot("44_bodycam_nv")
+		Settings.v["bodycam"] = false
 		print("SMOKE ok")
 		get_tree().quit()

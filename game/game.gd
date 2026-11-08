@@ -4,7 +4,7 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.6.0"
+const VERSION := "0.7.0"
 const HELP_TEXT := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
 SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
 HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
@@ -13,6 +13,7 @@ BUILD  Hold B, flick the mouse to pick a wall, let go. R rotates, left click pla
 USE  E opens doors, talks to Bjørn at the car dealership (he gives you the Tike or motorbike), enters vehicles
 DRIVE  E next to the Tike or Bike. W/S drive, A/D steer, Space brake, G horn, V camera, E get out. Ramps give air!
 DEVELOPER  P opens the developer panel (zombies chase me on/off, god mode, free building)
+BODYCAM  Settings > Gameplay. Night vision: Z
 MAP  M    Team ping  T    Open broadcast  Y (draws zombies)
 TEST KEYS  K +10 zombies   L +50 zombies   O remove zombies   I stats   U antidote   N +20 sandbags
 Esc opens the menu (pause, settings, controls, fullscreen). H shows or hides this list."""
@@ -77,7 +78,7 @@ func _setup_input() -> void:
 	_key("jump", [KEY_SPACE]); _key("sprint", [KEY_SHIFT]); _key("crouch", [KEY_C])
 	_key("fire", [MOUSE_BUTTON_LEFT]); _key("aim", [MOUSE_BUTTON_RIGHT])
 	_key("reload", [KEY_R]); _key("build", [KEY_B]); _key("craft", [KEY_Q])
-	_key("interact", [KEY_E]); _key("camera", [KEY_V]); _key("horn", [KEY_G]); _key("dev", [KEY_P])
+	_key("interact", [KEY_E]); _key("camera", [KEY_V]); _key("horn", [KEY_G]); _key("dev", [KEY_P]); _key("nightvision", [KEY_Z])
 	_key("map", [KEY_M]); _key("ping", [KEY_T]); _key("broadcast", [KEY_Y]); _key("help", [KEY_H])
 	for i in 6:
 		_key("weapon_%d" % (i + 1), [KEY_1 + i])

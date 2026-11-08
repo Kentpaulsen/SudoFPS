@@ -112,6 +112,7 @@ func _gameplay() -> Control:
 	_slider(box, "Field of view", "fov", 60.0, 100.0, 1.0, "%.0f")
 	_slider(box, "Mouse sensitivity", "sensitivity", 0.2, 3.0, 0.05, "%.2f")
 	_check(box, "Invert mouse Y", "invert_y")
+	_check(box, "Bodycam view (night vision on Z)", "bodycam")
 	_slider(box, "Day length (minutes)", "day_length_min", 4.0, 40.0, 1.0, "%.0f")
 	return box.get_parent()
 

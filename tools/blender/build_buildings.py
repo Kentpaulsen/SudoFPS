@@ -230,7 +230,7 @@ def church():
         for s in (-1, 1):
             y = yf + 3.0 + r * 1.6
             k.box((3.4, 0.45, 0.45), (s * 2.3, y, z0 + 0.225), FURN)
-            k.box((3.4, 0.08, 0.5), (s * 2.3, y + 0.24, z0 + 0.7), FURN, col=False)
+            k.box((3.4, 0.08, 0.5), (s * 2.3, y - 0.24, z0 + 0.7), FURN, col=False)   # backrest away from the altar
     k.box((W - 2 * t, 3.0, 0.3), (0, yb - 1.7, z0 + 0.15), STONE)
     k.box((2.4, 1.0, 1.0), (0, yb - 1.6, z0 + 0.8), TRIM)
     k.box((0.1, 0.1, 1.4), (0, yb - 0.5, z0 + 3.6), GOLD, col=False)
