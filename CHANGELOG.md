@@ -2,6 +2,7 @@
 
 ## Assets v0.2 (2026-11-08)
 - Vehicles: Tike (modified kiddie car with roll cage, knobby tyres, rear engine) and Bike (scrambler that leans in corners). Separate wheels and steering parts, seat/hand/foot/exit markers.
+- Both vehicles have a cartoon face (eyes, brows, grin). Pupils are separate objects so the game can make them look around.
 - Sandbag build pieces on a 3 m snapping cell: wall, wall with window, wall with doorway, L-shaped corner.
 - Repo layout: `assets/` (blend, glb, previews), `tools/blender/` (generator scripts), `docs/` (design decisions, asset conventions).
 

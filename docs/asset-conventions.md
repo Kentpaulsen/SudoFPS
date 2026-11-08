@@ -77,3 +77,5 @@ Origin on the ground under the vehicle centre, front -Y. The game drives both as
 | vehicle_bike | ~2.0 m long, bars 1.2 m | Steer (fork, bars, headlight; carries Wheel_F), Wheel_R | same |
 
 Wheels roll about their own X axis, with the pivot at the hub. Front wheels on the Tike also turn about Z for steering. On the Bike, `Steer` turns about the head tube and the whole bike leans about the origin's Y axis when cornering. Materials are tint slots, so the Tike's red tub and yellow cage can be recoloured in game.
+
+Faces: both vehicles have eyes, brows and a grin on the front (the Bike's sits on the number board and turns with the steering). `Pupil_L` and `Pupil_R` are separate objects with their origin at the eye centre. Moving them a few centimetres makes the vehicle look around, for example at the nearest player.

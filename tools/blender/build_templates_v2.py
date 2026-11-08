@@ -129,12 +129,50 @@ def ring(center, normal, radius, n=18):
     return [Vector(center) + R @ Vector((radius * math.cos(2 * math.pi * i / n),
                                          radius * math.sin(2 * math.pi * i / n), 0)) for i in range(n)]
 
+
+def face(m, centre, tilt_x, half_d, eye_lz, eye_x, eye_r, mouth_lz, mouth_w, lid_mat, white, black,
+         lid_angle=14):
+    """Cartoon face on the front of a box rotated tilt_x degrees about X. Returns eye centres and normal."""
+    R = Matrix.Rotation(math.radians(tilt_x), 3, 'X')
+    n = R @ Vector((0, -1, 0))
+    surf = lambda x, lz: Vector(centre) + R @ Vector((x, -half_d, lz)) + n * 0.004
+    eyes = []
+    for s in (1, -1):
+        c = surf(s * eye_x, eye_lz)
+        m.tube(c, c + n * 0.018, eye_r, white, seg=24)                                   # eye white
+        m.tube(c + n * 0.010, c + n * 0.022, eye_r * 1.12, black, seg=24)                # dark rim
+        m.tube(c + n * 0.012, c + n * 0.024, eye_r * 1.0, white, seg=24)
+        lidR = R @ Matrix.Rotation(math.radians(-s * lid_angle), 3, 'Y')                  # determined brow
+        lc = c + R @ Vector((0, 0, eye_r * 0.62)) + n * 0.03
+        bm = bmesh.new(); bmesh.ops.create_cube(bm, size=1.0)
+        M4 = Matrix.Translation(lc) @ lidR.to_4x4() @ Matrix.Diagonal((eye_r * 2.5, 0.03, eye_r * 0.75, 1))
+        bmesh.ops.transform(bm, matrix=M4, verts=bm.verts)
+        m._push(bm, lid_mat, 0.008, 2)
+        eyes.append(c + n * 0.024)
+    pts = [surf(t * mouth_w / 2, mouth_lz + 0.16 * mouth_w * t * t) for t in
+           [i / 6 - 1 for i in range(13)]]
+    pts = [p + n * 0.012 for p in pts]
+    m.path(pts, mouth_w * 0.06, black, seg=10)                                            # grin
+    for t in (-1, 1):
+        m.sphere(mouth_w * 0.07, pts[0 if t < 0 else -1] + R @ Vector((0, 0, mouth_w * 0.06)), black)
+    return eyes, n
+
+def pupils(eyes, n, r, mats, collection, parent, idx):
+    """Separate pupil objects with origin at eye centre, so the game can make them look around."""
+    out = []
+    for nm, c in zip(("Pupil_L", "Pupil_R"), eyes):
+        p = MB()
+        p.tube(c + n * 0.002 - Vector((0, 0, r * 0.25)), c + n * 0.014 - Vector((0, 0, r * 0.25)), r, idx, seg=18)
+        p.sphere(r * 0.3, c + n * 0.016 + Vector((r * 0.35, 0, r * 0.1)), idx - 1, seg=8)  # catch light
+        out.append(p.finish(nm, mats, collection, origin=c, parent=parent))
+    return out
+
 VEHICLE_README = """VEHICLE TEMPLATE ({kind})
 1 BU = 1 m. Origin on the ground under the centre of the vehicle. Front is -Y. Up is +Z.
 Moving parts are separate objects with their pivot where they rotate:
   Wheel_* roll about their local X axis. Front wheels / Steer also turn about Z (or the fork axis).
   SteeringWheel / Steer: rotate for steering input.
-Markers: SEAT (driver hips), HAND_L / HAND_R (grip points), FOOT_L / FOOT_R, EXIT_L (where the
+Face: Pupil_L / Pupil_R are separate, origin at the eye centre: move them a few cm to make the\n  vehicle look around (e.g. at the nearest player).\nMarkers: SEAT (driver hips), HAND_L / HAND_R (grip points), FOOT_L / FOOT_R, EXIT_L (where the
 driver is placed on exit), CAM_3P (third-person camera target).
 Colliders: '-convcolonly' boxes. The game drives this as an arcade vehicle (no real tyre physics).
 Materials are tint slots; keep names."""
@@ -145,8 +183,9 @@ def vehicle_tike():
     M = [mat("Plastic", (0.80, 0.07, 0.04), 0.35), mat("Cage", (0.95, 0.75, 0.05), 0.4, 0.3),
          mat("Frame", (0.92, 0.92, 0.90), 0.5, 0.2), mat("Rubber", (0.04, 0.04, 0.04), 0.9),
          mat("Metal", (0.45, 0.46, 0.47), 0.4, 0.8), mat("Hose", (0.85, 0.10, 0.08), 0.5),
-         mat("Exhaust", (0.10, 0.25, 0.65), 0.4, 0.5)]
-    PL, CG, FR, RB, MT, HS, EX = range(7)
+         mat("Exhaust", (0.10, 0.25, 0.65), 0.4, 0.5), mat("EyeWhite", (0.97, 0.97, 0.95), 0.3),
+         mat("Pupil", (0.03, 0.03, 0.04), 0.2)]
+    PL, CG, FR, RB, MT, HS, EX, EW, PU = range(9)
     c = coll("Tike")
     body = MB()
     # ---- red tub
@@ -211,7 +250,9 @@ def vehicle_tike():
     body.tube((-0.66, 0.60, 0.30), (0.66, 0.60, 0.30), 0.025, MT)                            # rear axle
     body.tube((-0.36, 0.48, 0.80), (-0.52, 1.30, 1.55), 0.008, RB, seg=6)                    # whip antenna
     body.sphere(0.02, (-0.52, 1.30, 1.55), RB)
+    eyes, n = face(body, (0, -0.46, 0.62), -18, 0.11, 0.075, 0.17, 0.085, -0.115, 0.36, PL, EW, RB)
     root = body.finish("Tike", M, c)
+    pupils(eyes, n, 0.038, M, c, root, PU)
 
     # steering wheel (separate, rotates about column axis)
     sw = MB()
@@ -242,8 +283,9 @@ def vehicle_bike():
     M = [mat("Paint", (0.80, 0.07, 0.04), 0.35), mat("Frame", (0.95, 0.75, 0.05), 0.4, 0.3),
          mat("Chrome", (0.80, 0.80, 0.82), 0.2, 1.0), mat("Rubber", (0.04, 0.04, 0.04), 0.9),
          mat("Metal", (0.42, 0.43, 0.44), 0.4, 0.8), mat("Plate", (0.93, 0.93, 0.90), 0.5),
-         mat("Seat", (0.10, 0.09, 0.09), 0.8)]
-    PA, FR, CH, RB, MT, PLT, SE = range(7)
+         mat("Seat", (0.10, 0.09, 0.09), 0.8), mat("EyeWhite", (0.97, 0.97, 0.95), 0.3),
+         mat("Pupil", (0.03, 0.03, 0.04), 0.2)]
+    PA, FR, CH, RB, MT, PLT, SE, EW, PU = range(9)
     c = coll("Bike")
     Rw, Wf, Wr = 0.32, 0.11, 0.13
     head = Vector((0, -0.50, 1.00))
@@ -303,7 +345,9 @@ def vehicle_bike():
     st.cyl(0.068, 0.02, (0, -0.63, 0.95), PLT, rot=(72, 0, 0), seg=18)
     st.box((0.26, 0.04, 0.22), (0, -0.58, 0.80), FR, rot=(-18, 0, 0), bevel=0.03, seg=2)  # number board
     st.box((0.14, 0.34, 0.025), (0, -0.72, 0.69), PA, rot=(-10, 0, 0), bevel=0.01, seg=2)   # front fender
+    eyes, n = face(st, (0, -0.58, 0.80), -18, 0.02, 0.035, 0.062, 0.042, -0.06, 0.15, FR, EW, RB, lid_angle=16)
     steer = st.finish("Steer", M, c, origin=head, parent=root)
+    pupils(eyes, n, 0.019, M, c, steer, PU)
 
     wm = [M[RB], M[MT], M[CH]]
     wheel("Wheel_F", fax, Rw, Wf, c, steer, wm, knobs=26)
