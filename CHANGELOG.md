@@ -1,5 +1,9 @@
 # Change log
 
+## Unreleased
+
+- Relay server for multiplayer (`server/`): join codes, traffic forwarding over WebSocket, one-line installer for a Debian 12 container. The game itself does not connect to it yet.
+
 ## Prototype v0.7.0 (2026-11-08)
 - New vehicles from Bjørn: an ATV and an 80s-style sport sedan (108 km/h). Your pick rolls out in the showroom.
 - Helicopter in developer mode (P > Spawn helicopter): Space climbs, Shift/C descends, W/S fly, A/D turn.
