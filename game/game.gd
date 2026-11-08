@@ -4,7 +4,7 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.7.0"
+const VERSION := "0.7.1"
 const HELP_TEXT := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
 SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
 HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
@@ -12,7 +12,8 @@ CRAFT  Q opens crafting. Sandbag = 1 fibre (bushes) + 2 stone (rocks)
 BUILD  Hold B, flick the mouse to pick a wall, let go. R rotates, left click places, right click exits
 USE  E opens doors, talks to Bjørn at the car dealership (he gives you the Tike or motorbike), enters vehicles
 DRIVE  E next to the Tike or Bike. W/S drive, A/D steer, Space brake, G horn, V camera, E get out. Ramps give air!
-DEVELOPER  P opens the developer panel (zombies chase me on/off, god mode, free building)
+DEVELOPER  P opens the developer panel (zombies chase me on/off, god mode, free building, helicopter in the hangar)
+HANGAR  Red button inside by the door (E) slides the roof open so the helicopter can fly out
 BODYCAM  Settings > Gameplay. Night vision: Z
 MAP  M    Team ping  T    Open broadcast  Y (draws zombies)
 TEST KEYS  K +10 zombies   L +50 zombies   O remove zombies   I stats   U antidote   N +20 sandbags

@@ -728,7 +728,7 @@ func _find_interact() -> void:
 			best = d
 			interact_target = door
 			interact_kind = "door"
-			interact_label = "close the door" if door.open else "open the door"
+			interact_label = door.label() if door.has_method("label") else ("close the door" if door.open else "open the door")
 	if w.npc:
 		var d: float = w.npc.global_position.distance_to(global_position)
 		if d < 3.0 and d < best:

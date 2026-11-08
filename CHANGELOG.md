@@ -1,8 +1,9 @@
 # Change log
 
-## Unreleased
-
-- Relay server for multiplayer (`server/`): join codes, traffic forwarding over WebSocket, one-line installer for a Debian 12 container. The game itself does not connect to it yet.
+## Prototype v0.7.1 (2026-11-08)
+- Helicopter hangar on the outskirts (green on the map). A red button inside by the big door slides the two roof halves apart on rails, with a flashing orange beacon and motor sound, so the helicopter can fly straight out. Press again to close.
+- Developer mode now parks the helicopter on the hangar's helipad instead of in front of you. There is only one; asking again brings it back.
+- Relay server for multiplayer (`server/`): join codes, traffic forwarding over WebSocket, one-line installer for a Debian 12 container. Works on Debian 12 and 13. The game itself does not connect to it yet.
 
 ## Prototype v0.7.0 (2026-11-08)
 - New vehicles from Bjørn: an ATV and an 80s-style sport sedan (108 km/h). Your pick rolls out in the showroom.

@@ -18,6 +18,7 @@ var sites: Array = []          # buildings: {kind, pos, rot, half}
 var ramps: Array = []
 var lamps: Array = []          # [OmniLight3D]
 var doors: Array = []
+var hangar = null
 var npc: Node3D
 var lamp_mat: StandardMaterial3D
 var lamps_on := false
@@ -382,11 +383,13 @@ const STRUCTURES := [
 	{"kind": "church", "min": 1, "max": 1, "ring": Vector2(28, 60)},
 	{"kind": "dealership", "min": 1, "max": 1, "ring": Vector2(45, 110)},
 	{"kind": "house", "min": 5, "max": 9, "ring": Vector2(25, 105)},
+	{"kind": "hangar", "min": 1, "max": 1, "ring": Vector2(60, 130)},
 ]
 const BUILDINGS := {
 	"supermarket": {"glb": "res://assets/glb/bld_supermarket.glb", "half": Vector2(12.4, 8.8), "off": Vector2(0, 0.5), "front": 9.3, "park": Vector2(22, 12)},
 	"church": {"glb": "res://assets/glb/bld_church.glb", "half": Vector2(5.8, 11.6), "off": Vector2(0, 1.2), "front": 12.8, "park": Vector2(14, 10)},
 	"dealership": {"glb": "res://assets/glb/bld_dealership.glb", "half": Vector2(11.4, 7.4), "off": Vector2(0, 0), "front": 7.5, "park": Vector2(22, 12)},
+	"hangar": {"glb": "", "half": Vector2(17.0, 12.5), "off": Vector2(0, 0), "front": 12.5, "park": Vector2.ZERO},
 	"house": {"glb": "res://assets/glb/bld_house.glb", "half": Vector2(4.6, 4.5), "off": Vector2(0, 0.3), "front": 4.5, "park": Vector2.ZERO},
 }
 const HOUSE_COLOURS := [Color(0.85, 0.78, 0.62), Color(0.70, 0.22, 0.15), Color(0.95, 0.93, 0.88), Color(0.55, 0.65, 0.72),
@@ -693,8 +696,17 @@ func _town() -> void:
 	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	for st in sites:
 		var b: Dictionary = BUILDINGS[st.kind]
-		var d := Game.asset(b.glb)
 		var xf := Transform3D(Basis(Vector3.UP, st.rot * PI / 2.0), st.pos)
+		if st.kind == "hangar":
+			hangar = Node3D.new()
+			hangar.set_script(load("res://game/hangar.gd"))
+			add_child(hangar)
+			hangar.global_transform = xf
+			hangar.build()
+			st["node"] = hangar
+			doors.append(hangar)
+			continue
+		var d := Game.asset(b.glb)
 		var root := Game.place_static(d, xf, self, Game.L_WORLD, 280.0)
 		st["node"] = root
 		_doors_for(st)
@@ -777,19 +789,40 @@ func give_vehicle(kind: String) -> Node3D:
 	vehicles.append(v)
 	return v
 
-## Developer mode: a helicopter appears 14 m in front of the player.
+## Developer mode: the helicopter is parked on the pad in the hangar (or 14 m in front of the
+## player if this island has no hangar). Only one helicopter exists; asking again brings it back.
 func spawn_heli() -> Node3D:
-	var fwd: Vector3 = -player.global_transform.basis.z
-	var p: Vector3 = player.global_position + Vector3(fwd.x, 0, fwd.z).normalized() * 14.0
-	p.y = height_at(p.x, p.z) + 0.5
-	var h := CharacterBody3D.new()
-	h.set_script(load("res://game/heli.gd"))
-	add_child(h)
-	h.setup("res://assets/glb/vehicle_heli.glb")
+	var p: Vector3
+	var yaw: float
+	var st = site_of("hangar")
+	if st:
+		yaw = st.rot * PI / 2.0
+		p = st.pos + Basis(Vector3.UP, yaw) * Vector3(0, 0.15, 2.5)
+	else:
+		var fwd: Vector3 = -player.global_transform.basis.z
+		p = player.global_position + Vector3(fwd.x, 0, fwd.z).normalized() * 14.0
+		p.y = height_at(p.x, p.z) + 0.5
+		yaw = player.rotation.y + PI
+	var h = null
+	for v in vehicles:
+		if v.kind == "heli":
+			h = v
+	if h != null and h.driver != null:
+		return h
+	if h == null:
+		h = CharacterBody3D.new()
+		h.set_script(load("res://game/heli.gd"))
+		add_child(h)
+		h.setup("res://assets/glb/vehicle_heli.glb")
+		vehicles.append(h)
 	h.global_position = p
-	h.rotation.y = player.rotation.y + PI
-	vehicles.append(h)
-	Game.msg("Helicopter ready. E to get in: Space climb, Shift/C descend, W/S fly, A/D turn", Color(0.8, 0.95, 1.0))
+	h.rotation = Vector3(0, yaw, 0)
+	h.velocity = Vector3.ZERO
+	h.speed = 0.0
+	if st:
+		Game.msg("Helicopter is in the hangar at %s. Press the red button by the door to open the roof" % Game.sector(st.pos), Color(0.8, 0.95, 1.0))
+	else:
+		Game.msg("Helicopter ready. E to get in: Space climb, Shift/C descend, W/S fly, A/D turn", Color(0.8, 0.95, 1.0))
 	return h
 
 func _parking(st: Dictionary, b: Dictionary, asphalt: Material, paint: Material, rng: RandomNumberGenerator) -> void:
@@ -1694,7 +1727,7 @@ func _map_image() -> void:
 		for yy in range(int((r.position.y + SIZE / 2.0) / SIZE * px), int((r.end.y + SIZE / 2.0) / SIZE * px) + 1):
 			for xx in range(int((r.position.x + SIZE / 2.0) / SIZE * px), int((r.end.x + SIZE / 2.0) / SIZE * px) + 1):
 				if xx >= 0 and yy >= 0 and xx < px and yy < px:
-					img.set_pixel(xx, yy, {"church": Color(0.45, 0.2, 0.18), "dealership": Color(0.2, 0.3, 0.55)}.get(st.kind, Color(0.22, 0.2, 0.2)))
+					img.set_pixel(xx, yy, {"church": Color(0.45, 0.2, 0.18), "dealership": Color(0.2, 0.3, 0.55), "hangar": Color(0.3, 0.4, 0.25)}.get(st.kind, Color(0.22, 0.2, 0.2)))
 	map_texture = ImageTexture.create_from_image(img)
 
 # ---------------------------------------------------------------- grass and pebbles

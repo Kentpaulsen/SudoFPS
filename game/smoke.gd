@@ -107,6 +107,8 @@ func _process(dt: float) -> void:
 		pl.pitch = -0.15
 	elif step == 8 and t > 17.0:
 		step = 9
+		if w.hangar:
+			w.hangar.toggle()
 		pl.fire()
 		_shot("06_rifle")
 	elif step == 9 and t > 18.0:
@@ -147,12 +149,11 @@ func _process(dt: float) -> void:
 		heli = w.spawn_heli()
 		pl.enter_vehicle(heli)
 		heli_y0 = heli.global_position.y
+		print("SMOKE hangar open=", w.hangar.open if w.hangar else "none", " in_hangar=", w.hangar != null and heli.global_position.distance_to(w.hangar.global_position) < 4.0)
 		Input.action_press("jump")
-		Input.action_press("move_forward")
 	elif step == 11 and heli != null and t > 27.0 and not heli_done:
 		heli_done = true
 		Input.action_release("jump")
-		Input.action_release("move_forward")
 		print("SMOKE heli climbed=%.1f speed=%.1f" % [heli.global_position.y - heli_y0, heli.speed])
 		pl.exit_vehicle()
 		var st0 = w.sites[0]
@@ -225,6 +226,8 @@ func _quick() -> void:
 	pl.set_physics_process(false)
 	if step == 0 and t > 1.0:
 		step = 1
+		if w.hangar:
+			w.hangar.toggle()
 		var dl = w.site_of("dealership")
 		var b := Basis(Vector3.UP, dl.rot * PI / 2.0)
 		w.give_vehicle("sedan")
@@ -243,12 +246,22 @@ func _quick() -> void:
 		step = 3
 		_shot("41_atv")
 		var h = w.spawn_heli()
-		var fwd: Vector3 = -pl.global_transform.basis.z
-		pl.global_position = h.global_position + Vector3(-fwd.x, 0, -fwd.z).normalized() * 18.0 + Vector3(4, 1, 0)
+		var hb := Basis(Vector3.UP, w.hangar.rotation.y)
+		pl.global_position = w.hangar.global_position + hb * Vector3(-14, 22, 30)
 		_look_at(h.global_position + Vector3(0, 1.5, 0))
 	elif step == 3 and t > 5.5:
 		step = 4
 		_shot("42_heli")
+		var hb := Basis(Vector3.UP, w.hangar.rotation.y)
+		pl.global_position = w.hangar.global_position + hb * Vector3(3.5, 1.6, 9.0)
+		_look_at(w.hangar.global_position + hb * Vector3(-2, 4.0, -4))
+	elif step == 4 and t > 6.0:
+		step = 5
+		_shot("42b_hangar_inside")
+		var dl = w.site_of("dealership")
+		var db := Basis(Vector3.UP, dl.rot * PI / 2.0)
+		pl.global_position = dl.pos + db * Vector3(0, 0.1, 30.0)
+		_look_at(dl.pos + db * Vector3(0, 1.0, 40.0))
 		if w.director:
 			w.director.clear_all()
 			var fwd: Vector3 = -pl.global_transform.basis.z
@@ -257,14 +270,14 @@ func _quick() -> void:
 				p.y = w.height_at(p.x, p.z)
 				var z = w.director.spawn(p, false)
 				z.rotation.y = pl.rotation.y
-	elif step == 4 and t > 6.5:
-		step = 5
+	elif step == 5 and t > 7.0:
+		step = 6
 		_shot("43_zombies")
 		Settings.v["bodycam"] = true
 		w.day_t = 0.9
 		pl.nightvision = true
-	elif step == 5 and t > 8.0:
-		step = 6
+	elif step == 6 and t > 8.5:
+		step = 7
 		_shot("44_bodycam_nv")
 		Settings.v["bodycam"] = false
 		print("SMOKE ok")
