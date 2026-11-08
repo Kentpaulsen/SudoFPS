@@ -47,8 +47,8 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 ## Materials and crafting
 - Trees: wood, crafted into planks.
 - Bushes/plants: fibre for sandbag sacks. Rocks: sand/filler. Sacks + filler = sandbags.
-- Rocks also give a small amount of metal. Metal crafts the crowbar.
-- Crafting menu needed (first recipes: sandbag, plank, crowbar).
+- Rocks also give a small amount of metal. Metal crafts the crowbar and the metal camera stick.
+- Crafting menu needed (first recipes: sandbag, plank, crowbar, camera stick).
 
 ## Storm: "Hex Horizon"
 - Shrinking hexagonal zone. Each new zone placed randomly inside the previous one.
@@ -92,6 +92,11 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Tike: one-seat modified kiddie car (roll cage, knobby tyres, rear engine). Arcade four-wheel handling.
 - Bike: one-seat scrambler. Same arcade handling, cannot fall over, the model leans into corners.
 - Canoe/surfboard for satellite islands.
+- Camera: first person by default. Third person only with a camera stick (GoPro-style) mounted on the vehicle.
+  - Crafted from wood (breaks on a hard crash or landing) or metal (has durability, survives several hits). Metal competes with crowbars for the same scarce resource.
+  - The camera sits at the stick tip and collides with the world, so it cannot see through walls.
+  - Proposed: the stick is visible to others and can be shot off. It belongs to the vehicle, so whoever takes the vehicle gets the stick.
+  - Breakage triggers on impact force (crash speed, hard landings), since the vehicles are arcade and rarely roll.
 
 ## Weapons
 - Pistol and UZI one-handed, shotgun and rifle two-handed, knife, bat.
