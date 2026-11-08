@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PixelEscape relay installer for Debian 12 (Proxmox LXC).
+# PixelEscape relay installer for Debian 12 or 13 (Proxmox LXC).
 # Run as root:
 #   curl -fsSL https://raw.githubusercontent.com/Kentpaulsen/SudoFPS/main/server/install.sh | bash
 # Optional: install Caddy as HTTPS front (needs ports 80+443 forwarded to this container):
@@ -7,7 +7,7 @@
 # Re-running the script updates the relay to the latest version.
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/Kentpaulsen/SudoFPS/main/server"
+REPO_RAW="https://raw.githubusercontent.com/Kentpaulsen/SudoFPS/${REF:-main}/server"
 DOMAIN="${DOMAIN:-pixelescape.notnow.no}"
 CADDY="${CADDY:-0}"
 

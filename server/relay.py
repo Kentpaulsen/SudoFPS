@@ -17,7 +17,7 @@ Game messages are binary frames: 4-byte big-endian target id (0 = everyone
 else in the room) followed by the payload. The server replaces the target id
 with the sender's id before forwarding.
 
-Built for websockets 10.x (Debian 12 package python3-websockets).
+Works with websockets 10.x (Debian 12) and 13+ (Debian 13).
 """
 import asyncio
 import json
@@ -30,6 +30,13 @@ import time
 from http import HTTPStatus
 
 import websockets
+
+try:                                    # websockets 13+ (Debian 13): new asyncio API
+    from websockets.asyncio.server import serve as ws_serve
+    NEW_API = True
+except ImportError:                     # websockets 10-12 (Debian 12)
+    ws_serve = websockets.serve
+    NEW_API = False
 
 HOST = os.environ.get("RELAY_HOST", "127.0.0.1")
 PORT = int(os.environ.get("RELAY_PORT", "8090"))
@@ -81,17 +88,31 @@ async def send_bin(ws, data):
         pass
 
 
-async def health(path, headers):
-    """Plain HTTP answers for anything that is not a WebSocket upgrade."""
-    if headers.get("Upgrade", "").lower() == "websocket":
-        return None
-    body = json.dumps({
+def _status_body():
+    return json.dumps({
         "service": "pixelescape-relay",
         "version": VERSION,
         "rooms": len(rooms),
         "players": sum(len(r.peers) for r in rooms.values()),
         "uptime_s": int(time.time() - started),
-    }).encode() + b"\n"
+    }) + "\n"
+
+
+def health_new(connection, request):
+    """Plain HTTP answers for anything that is not a WebSocket upgrade (websockets 13+)."""
+    if request.headers.get("Upgrade", "").lower() == "websocket":
+        return None
+    resp = connection.respond(HTTPStatus.OK, _status_body())
+    resp.headers["Content-Type"] = "application/json"
+    resp.headers["Access-Control-Allow-Origin"] = "*"
+    return resp
+
+
+async def health(path, headers):
+    """Same for websockets 10-12."""
+    if headers.get("Upgrade", "").lower() == "websocket":
+        return None
+    body = _status_body().encode()
     return HTTPStatus.OK, [("Content-Type", "application/json"),
                            ("Access-Control-Allow-Origin", "*")], body
 
@@ -176,9 +197,9 @@ async def main():
     stop = asyncio.get_running_loop().create_future()
     for s in (signal.SIGINT, signal.SIGTERM):
         asyncio.get_running_loop().add_signal_handler(s, stop.set_result, None)
-    async with websockets.serve(handler, HOST, PORT, process_request=health,
+    async with ws_serve(handler, HOST, PORT, process_request=health_new if NEW_API else health,
                                 max_size=MAX_MSG + 16, ping_interval=20, ping_timeout=20):
-        log.info("PixelEscape relay listening on %s:%d", HOST, PORT)
+        log.info("PixelEscape relay listening on %s:%d (websockets %s)", HOST, PORT, websockets.__version__)
         await stop
 
 
