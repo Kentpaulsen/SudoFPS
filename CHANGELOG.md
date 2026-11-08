@@ -1,5 +1,12 @@
 # Change log
 
+## Prototype v0.3.0 (2026-11-08)
+- Town: a supermarket (shelves, checkouts, storage room), a church (bell tower, pews, altar) and seven houses (two rooms, furniture) on every island. All enterable, with open windows. Zombies wait inside some of them.
+- Vehicle physics: velocity follows the slope, so hills and the eight dirt ramps launch you. Air time is announced, landings squash the suspension.
+- Vehicle sound: gear changes, separate Tike and Bike engines, gravel rumble, tyre skid, horn on G (draws zombies), start-up, crash and landing sounds.
+- Developer mode on P: zombies chase me on/off, god mode, free building, stats, spawn or remove zombies.
+- Suit outfit: navy suit, white shirt and tie added to the character template. Your arms wear suit sleeves with white cuffs, and a seated driver in a suit shows in third person.
+
 ## Prototype v0.2.0 (2026-11-08)
 Play-test requests: grassier ground, breaking trees with the bat, more realistic guns, driving.
 - Ground: thick grass tufts everywhere grassy, plus dirt patches and rock patches with loose stones. The map shows them too. Grass dies when Hex Horizon passes over it.

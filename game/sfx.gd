@@ -15,7 +15,14 @@ func _ready() -> void:
 	streams.uzi = _shot(0.40, 0.6, 0.8, 120.0, 0.06)
 	streams.rifle = _shot(0.95, 0.62, 1.0, 72.0, 0.14)
 	streams.shotgun = _shot(1.1, 0.32, 1.0, 52.0, 0.20)
-	streams.engine = _engine()
+	streams.engine_tike = _engine(48.0, 0.85, 0.15, 9.0)
+	streams.engine_bike = _engine(88.0, 0.45, 0.45, 4.0)
+	streams.rumble = _noise_loop(0.04, 0.6)
+	streams.skid = _noise_loop(0.55, 0.5, 1800.0)
+	streams.horn = _horn()
+	streams.land = _thud(70.0, 0.35)
+	streams.crash = _crash()
+	streams.start = _start()
 	streams.swing = _swing()
 	streams.hit = _thud(140.0, 0.12)
 	streams.chop = _click(260.0, 0.14)
@@ -96,21 +103,64 @@ func _shot(sec: float, lp: float, vol: float, thump: float, crack_len: float) ->
 		s[i] = (crack + body + echo) * vol * 0.85
 	return _wav(s)
 
-## Engine loop for vehicles (pitch follows speed).
-func _engine() -> AudioStreamWAV:
-	var s := _buf(0.2)
+## Engine loop: firing pulses at base_hz (pitch_scale follows rpm). thump = pulse sharpness, buzz = saw edge.
+func _engine(base_hz: float, thump: float, buzz: float, decay: float) -> AudioStreamWAV:
+	var cycles := 12
+	var n := int(RATE * cycles / base_hz)
+	var s := PackedFloat32Array()
+	s.resize(n)
 	var y := 0.0
-	for i in s.size():
+	for i in n:
 		var t := float(i) / RATE
-		var ph := fmod(t * 55.0, 1.0)
-		var pulse := exp(-ph * 9.0)
-		y += 0.2 * (randf_range(-1, 1) - y)
-		s[i] = (pulse * 0.8 + sin(TAU * 110.0 * t) * 0.25 + y * 0.25 * pulse) * 0.7
+		var ph := fmod(t * base_hz, 1.0)
+		var ph2 := fmod(t * base_hz * 0.5, 1.0)       # uneven firing between two cylinders
+		var pulse := exp(-ph * decay) * (1.0 if ph2 < 0.5 else 0.75)
+		y += 0.25 * (randf_range(-1, 1) - y)
+		var saw := ph * 2.0 - 1.0
+		s[i] = (pulse * thump + saw * buzz * 0.5 + sin(TAU * base_hz * 2.0 * t) * 0.15 + y * 0.18 * pulse) * 0.8
 	var w := _wav(s)
 	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	w.loop_begin = 0
+	w.loop_end = n
+	return w
+
+func _noise_loop(lp: float, vol: float, ring := 0.0) -> AudioStreamWAV:
+	var s := _buf(0.5)
+	var y := 0.0
+	for i in s.size():
+		var t := float(i) / RATE
+		y += lp * (randf_range(-1, 1) - y)
+		s[i] = y * vol * (1.0 + (sin(TAU * ring * t) * 0.6 if ring > 0.0 else 0.0)) * 2.0
+	var w := _wav(s)
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 	w.loop_end = s.size()
 	return w
+
+func _horn() -> AudioStreamWAV:
+	var s := _buf(0.7)
+	for i in s.size():
+		var t := float(i) / RATE
+		var on := 1.0 if (t < 0.25 or (t > 0.35 and t < 0.65)) else 0.0
+		var sq := signf(sin(TAU * 420.0 * t)) * 0.3 + signf(sin(TAU * 530.0 * t)) * 0.3
+		s[i] = sq * on * 0.7
+	return _wav(s)
+
+func _crash() -> AudioStreamWAV:
+	var s := _buf(0.6)
+	for i in s.size():
+		var t := float(i) / RATE
+		s[i] = (randf_range(-1, 1) * exp(-t * 7.0) + sin(TAU * 60.0 * t) * exp(-t * 12.0)) * 0.9
+	return _wav(s)
+
+func _start() -> AudioStreamWAV:
+	var s := _buf(0.9)
+	var ph := 0.0
+	for i in s.size():
+		var t := float(i) / RATE
+		var f := 18.0 + t * 60.0 if t < 0.5 else 55.0
+		ph = fmod(ph + f / RATE, 1.0)
+		s[i] = exp(-ph * 8.0) * 0.8 * minf(t * 4.0, 1.0)
+	return _wav(s)
 
 func _swing() -> AudioStreamWAV:
 	var s := _buf(0.25)

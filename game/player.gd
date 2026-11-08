@@ -78,6 +78,8 @@ var ghost_mat_bad: StandardMaterial3D
 var wheel_open := false
 var wheel_vec := Vector2.ZERO
 var craft_open := false
+var dev_open := false
+var driver_body: Node3D
 var map_open := false
 
 func _ready() -> void:
@@ -124,7 +126,7 @@ func captured() -> bool:
 	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 func ui_blocking() -> bool:
-	return craft_open or dead
+	return craft_open or dead or dev_open
 
 # ---------------------------------------------------------------- input
 func _unhandled_input(event: InputEvent) -> void:
@@ -226,6 +228,13 @@ func _process(dt: float) -> void:
 	_camera(dt)
 
 func _actions(cap: bool) -> void:
+	if Input.is_action_just_pressed("dev"):
+		dev_open = not dev_open
+		if dev_open:
+			craft_open = false
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		else:
+			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if Input.is_action_just_pressed("craft"):
 		craft_open = not craft_open
 		if craft_open:
@@ -253,6 +262,8 @@ func _actions(cap: bool) -> void:
 			enter_vehicle(near_vehicle)
 	if Input.is_action_just_pressed("camera") and vehicle:
 		third_person = not third_person
+		if driver_body:
+			driver_body.visible = third_person
 	if Input.is_action_just_pressed("ping"):
 		ping_marker = global_position
 		ping_t = 12.0
@@ -352,11 +363,14 @@ func _add_hand(parent: Node3D, at: Vector3, arm := false) -> void:
 	var skin := StandardMaterial3D.new()
 	skin.albedo_color = Color(0.58, 0.40, 0.30)
 	var sleeve := StandardMaterial3D.new()
-	sleeve.albedo_color = Color(0.17, 0.22, 0.13)
+	sleeve.albedo_color = Color(0.035, 0.05, 0.10)
+	var cuff := StandardMaterial3D.new()
+	cuff.albedo_color = Color(0.92, 0.92, 0.90)
 	var parts: Array = [[Vector3(0.07, 0.085, 0.10), at + Vector3(0, -0.035, 0), skin]]
 	if arm:
 		# forearm reaching back towards the camera (weapon space: -Z points at the player)
-		parts.append([Vector3(0.075, 0.08, 0.34), at + Vector3(0.0, -0.08, -0.2), sleeve])
+		parts.append([Vector3(0.078, 0.082, 0.025), at + Vector3(0.0, -0.045, -0.06), cuff])
+		parts.append([Vector3(0.085, 0.09, 0.34), at + Vector3(0.0, -0.08, -0.24), sleeve])
 	for prt in parts:
 		var mi := MeshInstance3D.new()
 		var bm := BoxMesh.new()
@@ -588,6 +602,8 @@ func _build(cap: bool) -> void:
 	build_slot = Game.world.piece_slot(build_kind, hit.position, build_rot)
 	var xf: Transform3D = build_slot.xform
 	var near_self := Vector2(xf.origin.x - global_position.x, xf.origin.z - global_position.z).length() < 1.0
+	if Game.dev_free_build:
+		cost = 0
 	build_valid = build_slot.free and build_slot.dry and inv.sandbags >= cost and not near_self
 	if ghost:
 		ghost.visible = true
@@ -642,8 +658,45 @@ func _camera(dt: float) -> void:
 	cam.position = cam.position.lerp(want, minf(10.0 * dt, 1.0))
 
 # ---------------------------------------------------------------- health
+func _make_driver_body() -> Node3D:
+	var root := Node3D.new()
+	var parts := [  # [size, position, colour]; seated pose facing +Z (vehicle forward), origin at the hips
+		[Vector3(0.40, 0.55, 0.24), Vector3(0, 0.30, -0.02), Color(0.035, 0.05, 0.10)],      # jacket
+		[Vector3(0.12, 0.30, 0.01), Vector3(0, 0.40, 0.11), Color(0.92, 0.92, 0.90)],        # shirt
+		[Vector3(0.045, 0.28, 0.012), Vector3(0, 0.38, 0.12), Color(0.45, 0.04, 0.04)],      # tie
+		[Vector3(0.10, 0.10, 0.10), Vector3(0, 0.62, 0), Color(0.62, 0.44, 0.33)],          # neck
+		[Vector3(0.22, 0.25, 0.24), Vector3(0, 0.78, 0), Color(0.62, 0.44, 0.33)],          # head
+		[Vector3(0.24, 0.06, 0.26), Vector3(0, 0.93, -0.01), Color(0.22, 0.14, 0.08)],      # hair
+		[Vector3(0.24, 0.16, 0.04), Vector3(0, 0.84, -0.12), Color(0.22, 0.14, 0.08)],
+		[Vector3(0.36, 0.16, 0.48), Vector3(0, 0.0, 0.2), Color(0.035, 0.05, 0.10)],        # thighs
+		[Vector3(0.34, 0.42, 0.14), Vector3(0, -0.18, 0.42), Color(0.035, 0.05, 0.10)],     # shins
+		[Vector3(0.34, 0.08, 0.24), Vector3(0, -0.38, 0.5), Color(0.02, 0.02, 0.02)],       # shoes
+		[Vector3(0.10, 0.10, 0.42), Vector3(0.24, 0.40, 0.18), Color(0.035, 0.05, 0.10)],   # arms to the wheel
+		[Vector3(0.10, 0.10, 0.42), Vector3(-0.24, 0.40, 0.18), Color(0.035, 0.05, 0.10)],
+		[Vector3(0.09, 0.09, 0.09), Vector3(0.22, 0.40, 0.42), Color(0.62, 0.44, 0.33)],
+		[Vector3(0.09, 0.09, 0.09), Vector3(-0.22, 0.40, 0.42), Color(0.62, 0.44, 0.33)],
+	]
+	for prt in parts:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = prt[0]
+		var m := StandardMaterial3D.new()
+		m.albedo_color = prt[2]
+		bm.material = m
+		mi.mesh = bm
+		mi.position = prt[1]
+		root.add_child(mi)
+	return root
+
 func enter_vehicle(v) -> void:
 	vehicle = v
+	if driver_body == null:
+		driver_body = _make_driver_body()
+	if driver_body.get_parent():
+		driver_body.get_parent().remove_child(driver_body)
+	v.model.add_child(driver_body)
+	driver_body.position = v.model.to_local(v.seat_global())
+	driver_body.visible = third_person
 	v.set_driver(self)
 	_vyaw = v.rotation.y
 	yaw = v.rotation.y + PI
@@ -653,7 +706,7 @@ func enter_vehicle(v) -> void:
 	build_mode = false
 	_clear_ghost()
 	aiming = false
-	Game.msg("W/S drive, A/D steer, Space brake, E get out, V camera", Color(0.8, 0.95, 1.0))
+	Game.msg("W/S drive, A/D steer, Space brake, G horn, E get out, V camera", Color(0.8, 0.95, 1.0))
 
 func exit_vehicle() -> void:
 	if vehicle == null:
@@ -661,6 +714,8 @@ func exit_vehicle() -> void:
 	var v = vehicle
 	vehicle = null
 	v.set_driver(null)
+	if driver_body:
+		driver_body.visible = false
 	var p: Vector3 = v.exit_global()
 	p.y = maxf(p.y, Game.world.height_at(p.x, p.z)) + 0.1
 	global_position = p
@@ -670,10 +725,10 @@ func exit_vehicle() -> void:
 	velocity = Vector3.ZERO
 
 func is_targetable() -> bool:
-	return not dead and zomb < 100.0
+	return not dead and zomb < 100.0 and Game.dev_zombies_chase
 
 func damage(amount: float) -> void:
-	if dead:
+	if dead or Game.dev_god:
 		return
 	hp -= amount
 	last_hurt = Time.get_ticks_msec() / 1000.0
@@ -685,7 +740,8 @@ func zombie_hit(dmg: float, infection: float) -> void:
 	if dead:
 		return
 	var before := zomb
-	zomb = minf(100.0, zomb + infection)
+	if not Game.dev_god:
+		zomb = minf(100.0, zomb + infection)
 	Sfx.play("hurt")
 	damage(dmg)
 	if before < 50.0 and zomb >= 50.0:

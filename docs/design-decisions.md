@@ -89,6 +89,8 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Open: zombie faction win condition, and what ends a Zombie Royale match.
 
 ## Vehicles
+- v0.3: slope-following physics, so crests and ramps give air time; landing squash and thump. Eight dirt ramps per island.
+- v0.3: engine sound with simulated gear changes (Tike deep four-stroke, Bike buzzy two-stroke), gravel rumble, tyre skid, horn (G, draws zombies), crash and landing sounds.
 - Tike: one-seat modified kiddie car (roll cage, knobby tyres, rear engine). Arcade four-wheel handling.
 - Bike: one-seat scrambler. Same arcade handling, cannot fall over, the model leans into corners.
 - Canoe/surfboard for satellite islands.
@@ -117,6 +119,24 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Vehicles are drivable offline from v0.2 (play-test request, ahead of the multiplayer plan). They will need network work in the multiplayer release.
 - Third person while driving is on the V key for testing; the camera stick that should gate it is not built yet.
 - Bat removes 2 tree hit points per hit, knife 1 (trees have 5).
+
+## Queued for the next implementation round (Kent, 2026-11-08)
+- A moving vehicle knocks back zombies and players like a bat, but 10x as hard. This applies whether the vehicle is manned or not.
+- Jumping off a moving vehicle: the player rolls and takes a bit of damage. The vehicle carries on until it loses its speed.
+- Crashing into zombies or structures slows the vehicle faster than rolling to a stop.
+- Standing still on the Bike: zombies can pull you off.
+
+## Town (v0.3)
+- Each island gets a supermarket, a church and seven houses, all enterable. The ground under them is flattened and shown as dirt yard; buildings show on the map.
+- Houses get random wall and roof colours. Zombies lurk inside the supermarket, church and some houses.
+- Templates: `bld_house`, `bld_supermarket`, `bld_church` (Blender 4.2), colliders per wall piece, open windows to shoot through.
+
+## Developer mode (v0.3)
+- P opens the developer panel: zombies chase me on/off, god mode, free building, stats, zombie spawn/remove buttons.
+
+## Character
+- Suit outfit added to the character template (Top_04_Suit with shirt and tie, Bottom_04_SuitTrousers, Shoes_03_Dress). First-person arms wear the suit sleeves; a seated suited driver shows in third person while driving.
+- No real people's likenesses for characters.
 
 ## Pending
 - Kent's review of this document.

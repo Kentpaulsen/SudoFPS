@@ -4,6 +4,8 @@ extends Node
 var t := 0.0
 var step := 0
 var shots := ""
+var max_air := 0.0
+var shot_air := false
 
 func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
@@ -93,9 +95,56 @@ func _process(dt: float) -> void:
 		pl.fire()
 		_shot("06_rifle")
 	elif step == 9 and t > 18.0:
+		step = 10
+		# jump test: line the Tike up with a ramp and floor it
+		var v = w.vehicles[0]
+		var r = w.ramps[0]
+		var dir: Vector3 = r.global_transform.basis.z
+		var start: Vector3 = r.global_position - dir * 16.0
+		start.y = w.height_at(start.x, start.z) + 0.5
+		v.global_position = start
+		v.rotation.y = r.rotation.y
+		v.speed = v.max_speed
+		if w.director:
+			w.director.clear_all()
+		pl.enter_vehicle(v)
+		pl.third_person = true
+		pl.driver_body.visible = true
+		pl.yaw = v.rotation.y + PI + 0.9
+		Input.action_press("move_forward")
+		max_air = 0.0
+	elif step == 10:
+		max_air = maxf(max_air, w.vehicles[0].air_time)
+		if not shot_air and w.vehicles[0].air_time > 0.25:
+			shot_air = true
+			_shot("07_air")
+		if t > 22.0:
+			step = 11
+			Input.action_release("move_forward")
+			print("SMOKE ramp max_air=%.2f" % max_air)
+			pl.exit_vehicle()
+			var st = w.sites[0]
+			var p: Vector3 = st.pos + Vector3(30, 0, 30)
+			p.y = w.height_at(p.x, p.z) + 0.2
+			pl.global_position = p
+			_look_at(st.pos + Vector3(0, 3, 0))
+	elif step == 11 and t > 23.5:
+		step = 12
+		_shot("08_town")
+		var church = null
+		for st in w.sites:
+			if st.kind == "church":
+				church = st
+		if church:
+			pl.global_position = church.pos + Basis(Vector3.UP, church.rot * PI / 2.0) * Vector3(0, 0.3, 6.0)
+			_look_at(church.pos + Basis(Vector3.UP, church.rot * PI / 2.0) * Vector3(0, 2.0, -8.0))
+	elif step == 12 and t > 25.0:
+		step = 13
+		_shot("09_church_inside")
+	elif step == 13 and t > 25.5:
 		var d = w.director
 		print("SMOKE fps=", Engine.get_frames_per_second(), " zombies=", d.zombies.size() if d else 0,
 			" chasing=", d.active_count() if d else 0, " hp=", pl.hp, " pieces=", w.pieces.size(),
-			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " storm=", w.storm != null)
+			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " buildings=", w.sites.size(), " ramps=", w.ramps.size(), " storm=", w.storm != null)
 		print("SMOKE ok")
 		get_tree().quit()

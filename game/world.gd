@@ -14,6 +14,8 @@ var rocks: Array = []
 var pieces := {}             # edge key -> piece root
 var map_texture: ImageTexture
 var vehicles: Array = []
+var sites: Array = []          # buildings: {kind, pos, rot, half}
+var ramps: Array = []
 var grass_chunks: Array = []  # [MultiMeshInstance3D, centre]
 var _dirt_n: FastNoiseLite
 var _rock_n: FastNoiseLite
@@ -44,6 +46,8 @@ func _ready() -> void:
 	_water()
 	_bounds()
 	_scatter()
+	_town()
+	_ramps()
 	_grass()
 	_map_image()
 	_fx_setup()
@@ -122,6 +126,7 @@ func _terrain() -> void:
 			var h := (noise.get_noise_2d(x, z) * 0.5 + 0.5) * 20.0 + detail.get_noise_2d(x, z) * 1.5
 			heights[j * N + i] = h * fall + 3.5 * fall - 7.0 * (1.0 - fall)
 	_patch_noise()
+	_plan_town()
 	# mesh
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -185,6 +190,8 @@ func ground_type(x: float, z: float) -> String:
 		return "water"
 	if h < 1.5:
 		return "sand"
+	if in_site(x, z, 2.5):
+		return "dirt"
 	var slope := Vector2(height_at(x + 1.0, z) - h, height_at(x, z + 1.0) - h).length()
 	if slope > 0.75 or _rock_n.get_noise_2d(x, z) > 0.5 or h > 17.0:
 		return "rock"
@@ -305,6 +312,8 @@ func _scatter() -> void:
 				continue
 			if kind != "rock" and forest.get_noise_2d(x, z) < -0.15 and rng.randf() < 0.8:
 				continue
+			if in_site(x, z, 3.0):
+				continue
 			if not _free(grid, x, z, spec[2]):
 				continue
 			grid[Vector2i(int(x / 6.0), int(z / 6.0))] = grid.get(Vector2i(int(x / 6.0), int(z / 6.0)), []) + [Vector2(x, z)]
@@ -335,6 +344,177 @@ func _scatter() -> void:
 			else:
 				bushes.append(entry)
 			placed += 1
+
+# ---------------------------------------------------------------- town
+const BUILDINGS := {
+	"supermarket": {"glb": "res://assets/glb/bld_supermarket.glb", "half": Vector2(12.6, 10.2), "off": Vector2(0, 0.6)},
+	"church": {"glb": "res://assets/glb/bld_church.glb", "half": Vector2(5.6, 12.0), "off": Vector2(0, 1.4)},
+	"house": {"glb": "res://assets/glb/bld_house.glb", "half": Vector2(4.6, 4.7), "off": Vector2(0, 0.3)},
+}
+const HOUSE_COLOURS := [Color(0.85, 0.78, 0.62), Color(0.70, 0.22, 0.15), Color(0.95, 0.93, 0.88), Color(0.55, 0.65, 0.72),
+	Color(0.80, 0.68, 0.35), Color(0.45, 0.55, 0.40), Color(0.35, 0.30, 0.28)]
+const ROOF_COLOURS := [Color(0.35, 0.10, 0.07), Color(0.18, 0.18, 0.20), Color(0.30, 0.22, 0.15), Color(0.20, 0.28, 0.35)]
+
+func _site_rect(kind: String, pos: Vector2, rot: int) -> Rect2:
+	var b: Dictionary = BUILDINGS[kind]
+	var half: Vector2 = b.half
+	var off: Vector2 = b.off
+	if rot % 2 == 1:
+		half = Vector2(half.y, half.x)
+	var o := off.rotated(-rot * PI / 2.0)
+	return Rect2(pos + o - half, half * 2.0)
+
+func in_site(x: float, z: float, margin := 0.0) -> bool:
+	for st in sites:
+		if (st.rect as Rect2).grow(margin).has_point(Vector2(x, z)):
+			return true
+	return false
+
+func _raw_h(x: float, z: float) -> float:
+	var i := clampi(roundi((x + SIZE / 2.0) / RES), 0, N - 1)
+	var j := clampi(roundi((z + SIZE / 2.0) / RES), 0, N - 1)
+	return heights[j * N + i]
+
+func _try_site(kind: String, pos: Vector2, rot: int) -> bool:
+	var r := _site_rect(kind, pos, rot)
+	var lo := 999.0
+	var hi := -999.0
+	var x := r.position.x
+	while x <= r.end.x:
+		var z := r.position.y
+		while z <= r.end.y:
+			var h := _raw_h(x, z)
+			lo = minf(lo, h)
+			hi = maxf(hi, h)
+			z += 2.0
+		x += 2.0
+	if lo < 2.2 or hi > 18.0 or hi - lo > 4.0:
+		return false
+	for st in sites:
+		if (st.rect as Rect2).grow(6.0).intersects(r):
+			return false
+	var target := (lo + hi) / 2.0
+	sites.append({"kind": kind, "pos": Vector3(pos.x, target, pos.y), "rot": rot, "rect": r})
+	# flatten the footprint, blend back to the hills over 6 m
+	for j in N:
+		var zz := -SIZE / 2.0 + j * RES
+		for i in N:
+			var xx := -SIZE / 2.0 + i * RES
+			var dx := maxf(maxf(r.position.x - 1.5 - xx, xx - r.end.x - 1.5), 0.0)
+			var dz := maxf(maxf(r.position.y - 1.5 - zz, zz - r.end.y - 1.5), 0.0)
+			var d := Vector2(dx, dz).length()
+			if d < 6.0:
+				var k := j * N + i
+				heights[k] = lerpf(target, heights[k], smoothstep(0.0, 6.0, d))
+	return true
+
+## Supermarket and church near the middle, seven houses around them.
+func _plan_town() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value + 501
+	var centre := Vector2.ZERO
+	for kind in ["supermarket", "church"]:
+		for t in 600:
+			var p := Vector2(rng.randf_range(-70, 70), rng.randf_range(-70, 70))
+			if _try_site(kind, p, rng.randi() % 4):
+				if kind == "supermarket":
+					centre = p
+				break
+	var houses := 0
+	for t in 3000:
+		if houses >= 7:
+			break
+		var a := rng.randf() * TAU
+		var r := rng.randf_range(25.0, 95.0)
+		var p := centre + Vector2(cos(a), sin(a)) * r
+		if _try_site("house", p, rng.randi() % 4):
+			houses += 1
+
+func _town() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value + 777
+	for st in sites:
+		var b: Dictionary = BUILDINGS[st.kind]
+		var d := Game.asset(b.glb)
+		var xf := Transform3D(Basis(Vector3.UP, st.rot * PI / 2.0), st.pos)
+		var root := Game.place_static(d, xf, self, Game.L_WORLD, 260.0)
+		st["node"] = root
+		if st.kind == "house":
+			var wall: Color = HOUSE_COLOURS[rng.randi() % HOUSE_COLOURS.size()]
+			var roof: Color = ROOF_COLOURS[rng.randi() % ROOF_COLOURS.size()]
+			for mi in root.get_children():
+				if mi is MeshInstance3D:
+					for si in mi.mesh.get_surface_count():
+						var m = mi.mesh.surface_get_material(si)
+						if m == null:
+							continue
+						var nm: String = m.resource_name
+						if nm == "Wall" or nm == "Roof":
+							var c := (m as BaseMaterial3D).duplicate() as BaseMaterial3D
+							c.albedo_color = wall if nm == "Wall" else roof
+							mi.set_surface_override_material(si, c)
+
+## Interior spawn points (DayZ: zombies lurk inside buildings).
+func interior_points() -> Array:
+	var out: Array = []
+	for st in sites:
+		var b := Basis(Vector3.UP, st.rot * PI / 2.0)
+		var pts: Array = []
+		match st.kind:
+			"supermarket": pts = [Vector3(-5, 0, 2), Vector3(4, 0, -1), Vector3(9, 0, 3), Vector3(-1, 0, -5)]
+			"church": pts = [Vector3(0, 0, -2), Vector3(1.5, 0, -6)]
+			"house": pts = [Vector3(-1.5, 0, 1.5)] if randf() < 0.6 else []
+		for p in pts:
+			out.append(st.pos + b * p + Vector3(0, 0.3, 0))
+	return out
+
+# ---------------------------------------------------------------- ramps
+func _ramps() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value + 909
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.45, 0.33, 0.20)
+	var made := 0
+	for t in 400:
+		if made >= 8:
+			break
+		var x := rng.randf_range(-130, 130)
+		var z := rng.randf_range(-130, 130)
+		var h := height_at(x, z)
+		if h < 2.0 or h > 14.0 or in_site(x, z, 8.0):
+			continue
+		var yaw := rng.randf() * TAU
+		var dir := Vector3(sin(yaw), 0, cos(yaw))
+		var h2 := height_at(x + dir.x * 7.0, z + dir.z * 7.0)
+		if absf(h2 - h) > 1.2:
+			continue
+		var hgt := rng.randf_range(1.3, 2.2)
+		var L := 7.0
+		var W := 4.0
+		var pts := PackedVector3Array([Vector3(-W / 2, -0.6, 0), Vector3(W / 2, -0.6, 0), Vector3(-W / 2, -0.6, L),
+			Vector3(W / 2, -0.6, L), Vector3(-W / 2, hgt, L), Vector3(W / 2, hgt, L), Vector3(-W / 2, 0, 0), Vector3(W / 2, 0, 0)])
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var tris := [[6, 4, 7], [7, 4, 5], [2, 4, 0], [0, 4, 6], [1, 5, 3], [1, 7, 5], [2, 3, 5], [2, 5, 4], [0, 1, 3], [0, 3, 2], [0, 6, 7], [0, 7, 1]]
+		for tri in tris:
+			for k in tri:
+				st.add_vertex(pts[k])
+		st.generate_normals()
+		var mi := MeshInstance3D.new()
+		mi.mesh = st.commit()
+		mi.material_override = mat
+		var body := StaticBody3D.new()
+		body.collision_layer = Game.L_WORLD
+		var cs := CollisionShape3D.new()
+		var cps := ConvexPolygonShape3D.new()
+		cps.points = pts
+		cs.shape = cps
+		body.add_child(cs)
+		body.add_child(mi)
+		add_child(body)
+		body.global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(x, minf(h, h2), z))
+		ramps.append(body)
+		made += 1
 
 func _free(grid: Dictionary, x: float, z: float, r: float) -> bool:
 	var cx := int(x / 6.0)
@@ -676,6 +856,12 @@ func _map_image() -> void:
 				var shade := height_at(wx + 2.0, wz + 2.0) - h
 				c = c.darkened(clampf(shade * 0.08, -0.15, 0.25))
 			img.set_pixel(x, y, c)
+	for st in sites:
+		var r: Rect2 = st.rect
+		for yy in range(int((r.position.y + SIZE / 2.0) / SIZE * px), int((r.end.y + SIZE / 2.0) / SIZE * px) + 1):
+			for xx in range(int((r.position.x + SIZE / 2.0) / SIZE * px), int((r.end.x + SIZE / 2.0) / SIZE * px) + 1):
+				if xx >= 0 and yy >= 0 and xx < px and yy < px:
+					img.set_pixel(xx, yy, Color(0.22, 0.2, 0.2) if st.kind != "church" else Color(0.45, 0.2, 0.18))
 	map_texture = ImageTexture.create_from_image(img)
 
 # ---------------------------------------------------------------- grass and pebbles

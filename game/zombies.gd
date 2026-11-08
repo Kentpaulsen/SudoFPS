@@ -22,6 +22,8 @@ func _ready() -> void:
 			  ZombieScript.build_mesh(Color(0.55, 0.53, 0.45), Color(0.30, 0.28, 0.22))]
 	Game.noise.connect(_on_noise)
 	var w = Game.world
+	for ip in w.interior_points():
+		spawn(ip)
 	var groups := 0
 	while zombies.size() < target_pop and groups < 400:
 		groups += 1
