@@ -61,6 +61,12 @@ var broadcast_cd := 0.0
 var ping_marker := Vector3.INF
 var ping_t := 0.0
 
+var vehicle = null
+var near_vehicle = null
+var third_person := false
+var sprinting := false
+var _vyaw := 0.0
+var gun_kick := 0.0
 var build_mode := false
 var build_kind := 0
 var build_rot := 0
@@ -76,6 +82,7 @@ var map_open := false
 
 func _ready() -> void:
 	Game.player = self
+	process_physics_priority = 10   # move after vehicles so the seat never lags
 	collision_layer = Game.L_PLAYER
 	collision_mask = Game.L_WORLD | Game.L_STRUCT | Game.L_ZOMBIE
 	floor_snap_length = 0.45
@@ -153,6 +160,16 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(dt: float) -> void:
 	if dead:
 		return
+	if vehicle:
+		yaw += vehicle.rotation.y - _vyaw
+		_vyaw = vehicle.rotation.y
+		rotation.y = yaw
+		head.rotation.x = pitch
+		head.position.y = 1.62
+		global_position = vehicle.seat_global() + Vector3(0, 0.72 - 1.62, 0)
+		velocity = Vector3.ZERO
+		sprinting = false
+		return
 	rotation.y = yaw
 	head.rotation.x = pitch
 	var cap := captured() and not wheel_open
@@ -161,6 +178,7 @@ func _physics_process(dt: float) -> void:
 		input = input.rotated(sin(wobble_t * 1.7) * 0.4 * clampf((zomb - 40.0) / 60.0, 0.0, 1.0))
 	crouching = cap and Input.is_action_pressed("crouch")
 	var sprint := cap and Input.is_action_pressed("sprint") and not crouching and input.y < -0.1 and not aiming
+	sprinting = sprint and input.length() > 0.1
 	var speed := 2.6 if crouching else (8.0 if sprint else 5.0)
 	if aiming:
 		speed = minf(speed, 3.2)
@@ -220,6 +238,21 @@ func _actions(cap: bool) -> void:
 		return
 	if Input.is_action_just_pressed("map"):
 		map_open = not map_open
+	near_vehicle = null
+	if vehicle == null:
+		var best := 3.2
+		for v in Game.world.vehicles:
+			var d: float = v.global_position.distance_to(global_position)
+			if d < best:
+				best = d
+				near_vehicle = v
+	if Input.is_action_just_pressed("interact"):
+		if vehicle:
+			exit_vehicle()
+		elif near_vehicle:
+			enter_vehicle(near_vehicle)
+	if Input.is_action_just_pressed("camera") and vehicle:
+		third_person = not third_person
 	if Input.is_action_just_pressed("ping"):
 		ping_marker = global_position
 		ping_t = 12.0
@@ -282,10 +315,10 @@ func equip(i: int) -> void:
 	muzzle = vm.find_child("MUZZLE", true, false)
 	slide = vm.find_child("Slide", true, false)
 	mag_node = vm.find_child("Mag", true, false)
-	_add_hand(vm, Vector3.ZERO)
+	_add_hand(vm, Vector3.ZERO, w.mode != "melee")
 	var gl: Node3D = vm.find_child("GRIP_L", true, false)
 	if gl and w.id != "bat":
-		_add_hand(vm, vm.global_transform.affine_inverse() * gl.global_position)
+		_add_hand(vm, vm.global_transform.affine_inverse() * gl.global_position, true)
 	base_pos = w.pos
 	ads_pos = base_pos
 	var aim_n: Node3D = vm.find_child("AIM", true, false)
@@ -315,17 +348,24 @@ func equip(i: int) -> void:
 		flash.visible = false
 	vm.position = base_pos + Vector3(0, -0.3, 0)
 
-func _add_hand(parent: Node3D, at: Vector3) -> void:
-	var mi := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(0.07, 0.085, 0.10)
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.58, 0.40, 0.30)
-	bm.material = m
-	mi.mesh = bm
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.position = at + Vector3(0, -0.035, 0)
-	parent.add_child(mi)
+func _add_hand(parent: Node3D, at: Vector3, arm := false) -> void:
+	var skin := StandardMaterial3D.new()
+	skin.albedo_color = Color(0.58, 0.40, 0.30)
+	var sleeve := StandardMaterial3D.new()
+	sleeve.albedo_color = Color(0.17, 0.22, 0.13)
+	var parts: Array = [[Vector3(0.07, 0.085, 0.10), at + Vector3(0, -0.035, 0), skin]]
+	if arm:
+		# forearm reaching back towards the camera (weapon space: -Z points at the player)
+		parts.append([Vector3(0.075, 0.08, 0.34), at + Vector3(0.0, -0.08, -0.2), sleeve])
+	for prt in parts:
+		var mi := MeshInstance3D.new()
+		var bm := BoxMesh.new()
+		bm.size = prt[0]
+		bm.material = prt[2]
+		mi.mesh = bm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = prt[1]
+		parent.add_child(mi)
 
 func _weapon(dt: float, cap: bool) -> void:
 	var w: Dictionary = W[cur]
@@ -335,7 +375,7 @@ func _weapon(dt: float, cap: bool) -> void:
 		if reloading <= 0.0:
 			ammo[cur] = w.mag
 			Sfx.play("click", -4, 0.8)
-	var active := cap and not build_mode and not wheel_open
+	var active := cap and not build_mode and not wheel_open and vehicle == null
 	aiming = active and Input.is_action_pressed("aim") and w.mode != "melee"
 	if active:
 		if Input.is_action_just_pressed("reload"):
@@ -345,7 +385,10 @@ func _weapon(dt: float, cap: bool) -> void:
 			fire()
 	# viewmodel motion
 	if vm:
+		vm.visible = vehicle == null
 		var target := ads_pos if aiming else base_pos
+		if sprinting and w.mode != "melee":
+			target += Vector3(-0.06, -0.07, 0.04)
 		var moving := Vector2(velocity.x, velocity.z).length() > 0.5 and is_on_floor()
 		if moving:
 			target += Vector3(cos(bob_t) * 0.009, absf(sin(bob_t)) * 0.013, 0) * (0.25 if aiming else 1.0)
@@ -358,10 +401,13 @@ func _weapon(dt: float, cap: bool) -> void:
 		vm.position = vm.position.lerp(target, minf(18.0 * dt, 1.0))
 		swing_t = maxf(swing_t - dt / maxf(w.get("rate", 0.5), 0.1), 0.0)
 		var s := sin(swing_t * PI)
+		gun_kick = move_toward(gun_kick, 0.0, dt * 7.0)
+		var sprint_rot := Vector3(-0.35, 0.7, 0.15) if sprinting and w.mode != "melee" else Vector3.ZERO
 		if w.id == "bat":
 			pivot.rotation = Vector3(-0.5 * s, 1.1 * s, 0.4 * s)
 		else:
-			pivot.rotation = Vector3.ZERO
+			var target_rot := sprint_rot + Vector3(gun_kick * 0.18, 0, gun_kick * randf_range(-0.03, 0.03))
+			pivot.rotation = pivot.rotation.lerp(target_rot, minf(14.0 * dt, 1.0)) if gun_kick < 0.01 else target_rot
 			pivot.position = Vector3(0, 0, -0.28 * s) if w.id == "knife" else Vector3.ZERO
 
 func start_reload() -> void:
@@ -412,6 +458,20 @@ func fire() -> void:
 	yaw += randf_range(-1.0, 1.0) * w.recoil * 0.25
 	pitch = clampf(pitch + w.recoil * 0.35, -1.5, 1.5)
 	kick = 1.0
+	gun_kick = 1.0
+	var ej: Node3D = vm.find_child("EJECT", true, false) if vm else null
+	if ej:
+		Game.world.casing(ej.global_position, (cam.global_transform.basis.x + cam.global_transform.basis.y * 0.6).normalized(), w.id == "shotgun")
+	if muzzle:
+		Game.world.smoke(muzzle.global_position)
+	if w.id == "shotgun":
+		var pump: Node3D = vm.find_child("Pump", true, false)
+		if pump:
+			var rest := pump.position
+			var tw2 := create_tween()
+			tw2.tween_interval(0.25)
+			tw2.tween_property(pump, "position", rest + Vector3(0, 0, -0.08), 0.12)
+			tw2.tween_property(pump, "position", rest, 0.12)
 	if flash:
 		flash.visible = true
 		flash.rotation.z = randf() * TAU
@@ -454,7 +514,10 @@ func _melee_hit() -> void:
 		head_marker = r == 2
 		Game.make_noise(global_position, 10.0)
 		return
-	var got: Dictionary = Game.world.server_harvest(col)
+	var power := 1
+	if w.id == "bat" and col.has_meta("owner_root") and col.get_meta("owner_root").get_meta("res", "") == "wood":
+		power = 2
+	var got: Dictionary = Game.world.server_harvest(col, power)
 	if got.is_empty():
 		Sfx.play3d("hit", hit.position, -6.0, 1.4)
 		return
@@ -567,8 +630,45 @@ func _camera(dt: float) -> void:
 	cam.rotation.x = recoil_off + sin(wobble_t * 0.9) * 0.035 * k
 	cam.rotation.z = sin(wobble_t * 1.3) * 0.07 * k
 	cam.fov = lerpf(cam.fov, 52.0 if aiming else 75.0, minf(12.0 * dt, 1.0))
+	var want := Vector3.ZERO
+	if vehicle and third_person:
+		want = Vector3(0, 1.3, 5.0)
+		var from := head.global_position
+		var to := head.global_transform * want
+		var q := PhysicsRayQueryParameters3D.create(from, to, Game.L_WORLD | Game.L_STRUCT, [get_rid(), vehicle.get_rid()])
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		if hit:
+			want = want * maxf(from.distance_to(hit.position) - 0.3, 0.5) / want.length()
+	cam.position = cam.position.lerp(want, minf(10.0 * dt, 1.0))
 
 # ---------------------------------------------------------------- health
+func enter_vehicle(v) -> void:
+	vehicle = v
+	v.set_driver(self)
+	_vyaw = v.rotation.y
+	yaw = v.rotation.y + PI
+	pitch = -0.1
+	collision_layer = 0
+	collision_mask = 0
+	build_mode = false
+	_clear_ghost()
+	aiming = false
+	Game.msg("W/S drive, A/D steer, Space brake, E get out, V camera", Color(0.8, 0.95, 1.0))
+
+func exit_vehicle() -> void:
+	if vehicle == null:
+		return
+	var v = vehicle
+	vehicle = null
+	v.set_driver(null)
+	var p: Vector3 = v.exit_global()
+	p.y = maxf(p.y, Game.world.height_at(p.x, p.z)) + 0.1
+	global_position = p
+	collision_layer = Game.L_PLAYER
+	collision_mask = Game.L_WORLD | Game.L_STRUCT | Game.L_ZOMBIE
+	cam.position = Vector3.ZERO
+	velocity = Vector3.ZERO
+
 func is_targetable() -> bool:
 	return not dead and zomb < 100.0
 
@@ -596,6 +696,7 @@ func zombie_hit(dmg: float, infection: float) -> void:
 			equip(5)
 
 func die() -> void:
+	exit_vehicle()
 	dead = true
 	build_mode = false
 	_clear_ghost()

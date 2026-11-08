@@ -11,10 +11,11 @@ var _i2 := 0
 
 func _ready() -> void:
 	seed(1234)
-	streams.pistol = _shot(0.32, 0.45, 1.0, 90.0)
-	streams.uzi = _shot(0.18, 0.55, 0.8, 110.0)
-	streams.rifle = _shot(0.42, 0.55, 1.0, 70.0)
-	streams.shotgun = _shot(0.6, 0.3, 1.0, 55.0)
+	streams.pistol = _shot(0.75, 0.5, 0.95, 95.0, 0.10)
+	streams.uzi = _shot(0.40, 0.6, 0.8, 120.0, 0.06)
+	streams.rifle = _shot(0.95, 0.62, 1.0, 72.0, 0.14)
+	streams.shotgun = _shot(1.1, 0.32, 1.0, 52.0, 0.20)
+	streams.engine = _engine()
 	streams.swing = _swing()
 	streams.hit = _thud(140.0, 0.12)
 	streams.chop = _click(260.0, 0.14)
@@ -79,15 +80,37 @@ func _buf(sec: float) -> PackedFloat32Array:
 	s.resize(int(sec * RATE))
 	return s
 
-func _shot(sec: float, lp: float, vol: float, thump: float) -> AudioStreamWAV:
+## Gunshot: sharp crack, low body thump, then a muffled outdoor echo tail.
+func _shot(sec: float, lp: float, vol: float, thump: float, crack_len: float) -> AudioStreamWAV:
 	var s := _buf(sec)
+	var y := 0.0
+	var tail := 0.0
+	for i in s.size():
+		var t := float(i) / RATE
+		var n := randf_range(-1, 1)
+		y += lp * (n - y)
+		tail += 0.04 * (n - tail)
+		var crack := (n * 0.9 + y) * exp(-t / crack_len * 5.0)
+		var body := sin(TAU * thump * t * (1.0 - t * 0.6)) * exp(-t * 18.0) * 1.1
+		var echo := tail * 3.0 * exp(-t * 4.5) * smoothstep(0.02, 0.09, t)
+		s[i] = (crack + body + echo) * vol * 0.85
+	return _wav(s)
+
+## Engine loop for vehicles (pitch follows speed).
+func _engine() -> AudioStreamWAV:
+	var s := _buf(0.2)
 	var y := 0.0
 	for i in s.size():
 		var t := float(i) / RATE
-		y += lp * (randf_range(-1, 1) - y)
-		var env := exp(-t * 14.0 / sec)
-		s[i] = (y * 1.6 + sin(TAU * thump * t) * exp(-t * 22.0) * 0.9) * env * vol
-	return _wav(s)
+		var ph := fmod(t * 55.0, 1.0)
+		var pulse := exp(-ph * 9.0)
+		y += 0.2 * (randf_range(-1, 1) - y)
+		s[i] = (pulse * 0.8 + sin(TAU * 110.0 * t) * 0.25 + y * 0.25 * pulse) * 0.7
+	var w := _wav(s)
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	w.loop_begin = 0
+	w.loop_end = s.size()
+	return w
 
 func _swing() -> AudioStreamWAV:
 	var s := _buf(0.25)

@@ -32,11 +32,7 @@ func _process(dt: float) -> void:
 		return
 	if step == 0 and t > 1.0:
 		step = 1
-		var tike: Node3D = null
-		for c in w.get_children():
-			if c.has_method("setup"):
-				tike = c
-				break
+		var tike = w.vehicles[0]
 		if tike:
 			_look_at(tike.global_position + Vector3(0, 0.6, 0))
 	elif step == 1 and t > 2.5:
@@ -76,10 +72,30 @@ func _process(dt: float) -> void:
 		_shot("04_zombified_map")
 		pl.map_open = false
 		pl.zomb = 0.0
-	elif step == 6 and t > 14.0:
+	elif step == 6 and t > 12.0:
+		step = 7
+		pl.enter_vehicle(w.vehicles[0])
+		pl.third_person = true
+		Input.action_press("move_forward")
+		Input.action_press("move_left")
+	elif step == 7 and t > 15.5:
+		step = 8
+		_shot("05_driving")
+		Input.action_release("move_forward")
+		Input.action_release("move_left")
+		print("SMOKE drove speed=", w.vehicles[0].speed, " moved=", w.vehicles[0].global_position)
+		pl.exit_vehicle()
+		pl.equip(3)
+		pl.yaw += 0.6
+		pl.pitch = -0.15
+	elif step == 8 and t > 17.0:
+		step = 9
+		pl.fire()
+		_shot("06_rifle")
+	elif step == 9 and t > 18.0:
 		var d = w.director
 		print("SMOKE fps=", Engine.get_frames_per_second(), " zombies=", d.zombies.size() if d else 0,
 			" chasing=", d.active_count() if d else 0, " hp=", pl.hp, " pieces=", w.pieces.size(),
-			" trees=", w.trees.size(), " storm=", w.storm != null)
+			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " storm=", w.storm != null)
 		print("SMOKE ok")
 		get_tree().quit()

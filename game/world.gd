@@ -13,6 +13,11 @@ var bushes: Array = []
 var rocks: Array = []
 var pieces := {}             # edge key -> piece root
 var map_texture: ImageTexture
+var vehicles: Array = []
+var grass_chunks: Array = []  # [MultiMeshInstance3D, centre]
+var _dirt_n: FastNoiseLite
+var _rock_n: FastNoiseLite
+var _tone_n: FastNoiseLite
 
 var player: CharacterBody3D
 var hud: CanvasLayer
@@ -39,6 +44,7 @@ func _ready() -> void:
 	_water()
 	_bounds()
 	_scatter()
+	_grass()
 	_map_image()
 	_fx_setup()
 	var spawn := find_spawn(Vector3.ZERO, 60.0)
@@ -115,6 +121,7 @@ func _terrain() -> void:
 			var fall := clampf(1.0 - pow(maxf(d, 0.0), 2.6), 0.0, 1.0)
 			var h := (noise.get_noise_2d(x, z) * 0.5 + 0.5) * 20.0 + detail.get_noise_2d(x, z) * 1.5
 			heights[j * N + i] = h * fall + 3.5 * fall - 7.0 * (1.0 - fall)
+	_patch_noise()
 	# mesh
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -158,24 +165,50 @@ func _terrain() -> void:
 	body.add_child(cs)
 	add_child(body)
 
-func _ground_color(i: int, j: int) -> Color:
-	var h := heights[j * N + i]
-	var hx := heights[j * N + mini(i + 1, N - 1)] - h
-	var hz := heights[mini(j + 1, N - 1) * N + i] - h
-	var slope := Vector2(hx, hz).length() / RES
-	var c: Color
+func _patch_noise() -> void:
+	_dirt_n = FastNoiseLite.new()
+	_dirt_n.seed = seed_value + 21
+	_dirt_n.frequency = 0.035
+	_dirt_n.fractal_octaves = 3
+	_rock_n = FastNoiseLite.new()
+	_rock_n.seed = seed_value + 37
+	_rock_n.frequency = 0.03
+	_rock_n.fractal_octaves = 3
+	_tone_n = FastNoiseLite.new()
+	_tone_n.seed = seed_value + 53
+	_tone_n.frequency = 0.05
+
+## "water", "sand", "grass", "dirt" or "rock" at a world position.
+func ground_type(x: float, z: float) -> String:
+	var h := height_at(x, z)
 	if h < 0.0:
-		c = Color(0.55, 0.50, 0.36).darkened(clampf(-h / 8.0, 0.0, 0.6))
-	elif h < 1.6:
-		c = Color(0.80, 0.74, 0.52)
-	elif h < 15.0:
-		c = Color(0.36, 0.55, 0.24).lerp(Color(0.28, 0.45, 0.20), clampf((h - 1.6) / 13.0, 0.0, 1.0))
-	else:
-		c = Color(0.42, 0.45, 0.32)
-	if slope > 0.75 and h > 1.0:
-		c = c.lerp(Color(0.45, 0.44, 0.42), clampf((slope - 0.75) * 2.0, 0.0, 1.0))
-	var n := float((i * 7919 + j * 104729) % 97) / 97.0
-	return c.darkened(n * 0.06)
+		return "water"
+	if h < 1.5:
+		return "sand"
+	var slope := Vector2(height_at(x + 1.0, z) - h, height_at(x, z + 1.0) - h).length()
+	if slope > 0.75 or _rock_n.get_noise_2d(x, z) > 0.5 or h > 17.0:
+		return "rock"
+	if _dirt_n.get_noise_2d(x, z) > 0.38:
+		return "dirt"
+	return "grass"
+
+func _type_color(t: String, x: float, z: float) -> Color:
+	var v := _tone_n.get_noise_2d(x, z)
+	match t:
+		"water": return Color(0.50, 0.46, 0.33)
+		"sand": return Color(0.80, 0.73, 0.50).darkened(v * 0.05)
+		"rock": return Color(0.42, 0.41, 0.39).lerp(Color(0.33, 0.32, 0.31), v * 0.5 + 0.5)
+		"dirt": return Color(0.40, 0.29, 0.18).lerp(Color(0.33, 0.24, 0.15), v * 0.5 + 0.5)
+	return Color(0.24, 0.50, 0.15).lerp(Color(0.33, 0.58, 0.18), v * 0.5 + 0.5)
+
+func _ground_color(i: int, j: int) -> Color:
+	var x := -SIZE / 2.0 + i * RES
+	var z := -SIZE / 2.0 + j * RES
+	var h := heights[j * N + i]
+	var c := _type_color(ground_type(x, z), x, z)
+	if h < 0.0:
+		c = c.darkened(clampf(-h / 8.0, 0.0, 0.6))
+	return c
 
 func height_at(x: float, z: float) -> float:
 	var fx := (x + SIZE / 2.0) / RES
@@ -314,28 +347,34 @@ func _free(grid: Dictionary, x: float, z: float, r: float) -> bool:
 	return true
 
 ## Melee hit on a resource. Returns {res: amount} gathered (empty if not a resource).
-func server_harvest(body: Object) -> Dictionary:
+## Melee hit on a resource. power = hit points removed (the bat hits trees for 2).
+## Returns {res: amount} gathered (empty if not a resource).
+func server_harvest(body: Object, power := 1) -> Dictionary:
 	if not (body is Node) or not body.has_meta("owner_root"):
 		return {}
 	var root: Node3D = body.get_meta("owner_root")
 	if not is_instance_valid(root) or root.get_meta("hp", 0) <= 0:
 		return {}
 	var res: String = root.get_meta("res")
-	var hp: int = root.get_meta("hp") - 1
+	var hp: int = root.get_meta("hp") - power
 	root.set_meta("hp", hp)
 	var out := {}
 	match res:
-		"wood": out = {"wood": 6}
+		"wood": out = {"wood": 6 * power}
 		"stone":
 			out = {"stone": 6}
 			if randf() < 0.4:
 				out["metal"] = 1
 		"fibre": out = {"fibre": 4}
-	var tw := create_tween()
-	tw.tween_property(root, "scale", root.scale * 0.94, 0.05)
-	tw.tween_property(root, "scale", root.scale, 0.08)
 	if hp <= 0:
 		_remove_resource(root, res == "wood")
+	else:
+		var rest := root.basis
+		var axis := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
+		var tw := create_tween()
+		tw.tween_property(root, "basis", rest.rotated(axis, 0.06), 0.05)
+		tw.tween_property(root, "basis", rest.rotated(axis, -0.03), 0.07)
+		tw.tween_property(root, "basis", rest, 0.08)
 	Game.make_noise(root.global_position, 18.0)
 	return out
 
@@ -345,14 +384,48 @@ func _remove_resource(root: Node3D, fall: bool) -> void:
 			c.queue_free()
 	var tw := create_tween()
 	if fall:
+		var stump := MeshInstance3D.new()
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.2
+		cm.bottom_radius = 0.26
+		cm.height = 0.4
+		var sm := StandardMaterial3D.new()
+		sm.albedo_color = Color(0.30, 0.20, 0.12)
+		cm.material = sm
+		stump.mesh = cm
+		add_child(stump)
+		stump.global_position = root.global_position + Vector3(0, 0.2, 0)
+		var top := MeshInstance3D.new()
+		var tm := CylinderMesh.new()
+		tm.top_radius = 0.19
+		tm.bottom_radius = 0.19
+		tm.height = 0.02
+		var tmat := StandardMaterial3D.new()
+		tmat.albedo_color = Color(0.78, 0.62, 0.40)
+		tm.material = tmat
+		top.mesh = tm
+		top.position.y = 0.205
+		stump.add_child(top)
+		puff(root.global_position + Vector3(0, 1.0, 0), Color(0.62, 0.46, 0.26), 14)
+		Sfx.play3d("chop", root.global_position + Vector3(0, 1, 0), 6.0, 0.55)
 		var axis := Vector3(randf_range(-1, 1), 0, randf_range(-1, 1)).normalized()
-		tw.tween_property(root, "basis", root.basis.rotated(axis, PI / 2.1), 1.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_property(root, "basis", root.basis.rotated(axis, PI / 2.1), 1.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_callback(func(): Sfx.play3d("hit", root.global_position + Vector3(0, 0.5, 0), 6.0, 0.5))
 		tw.tween_interval(2.0)
 	tw.tween_property(root, "scale", Vector3(0.01, 0.01, 0.01), 0.6)
 	tw.tween_callback(root.queue_free)
 
 ## Storm: vegetation outside the zone dies.
 func kill_vegetation(inside: Callable, budget: int) -> void:
+	for g in grass_chunks:
+		if g[0].visible:
+			var c: Vector3 = g[1]
+			var all_out := true
+			for o in [Vector2(-12, -12), Vector2(12, -12), Vector2(-12, 12), Vector2(12, 12)]:
+				if inside.call(Vector2(c.x, c.z) + o):
+					all_out = false
+			if all_out:
+				g[0].visible = false
 	for list in [trees, bushes]:
 		var i: int = list.size() - 1
 		while i >= 0 and budget > 0:
@@ -514,6 +587,59 @@ func puff(pos: Vector3, color: Color, amount := 8) -> void:
 	p.emitting = true
 	get_tree().create_timer(1.0).timeout.connect(p.queue_free)
 
+func casing(pos: Vector3, dir: Vector3, shell := false) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.amount = 1
+	p.lifetime = 0.9
+	p.explosiveness = 1.0
+	p.local_coords = false
+	p.direction = dir
+	p.spread = 12.0
+	p.initial_velocity_min = 2.0
+	p.initial_velocity_max = 3.2
+	p.angular_velocity_min = 400.0
+	p.angular_velocity_max = 900.0
+	p.gravity = Vector3(0, -9.8, 0)
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.012, 0.012, 0.05) if shell else Vector3(0.007, 0.007, 0.022)
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.7, 0.1, 0.08) if shell else Color(0.85, 0.62, 0.22)
+	m.metallic = 0.6
+	m.roughness = 0.35
+	bm.material = m
+	p.mesh = bm
+	add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	get_tree().create_timer(1.2).timeout.connect(p.queue_free)
+
+func smoke(pos: Vector3) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.amount = 4
+	p.lifetime = 0.7
+	p.explosiveness = 0.9
+	p.direction = Vector3.UP
+	p.spread = 25.0
+	p.initial_velocity_min = 0.3
+	p.initial_velocity_max = 0.8
+	p.gravity = Vector3(0, 0.4, 0)
+	p.scale_amount_min = 0.04
+	p.scale_amount_max = 0.09
+	var bm := BoxMesh.new()
+	bm.size = Vector3.ONE
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.75, 0.75, 0.75, 0.35)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.material = m
+	p.mesh = bm
+	add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	get_tree().create_timer(1.0).timeout.connect(p.queue_free)
+
 func tracer(from: Vector3, to: Vector3) -> void:
 	var len := from.distance_to(to)
 	if len < 1.0:
@@ -545,25 +671,96 @@ func _map_image() -> void:
 			var c: Color
 			if h < 0.0:
 				c = Color(0.16, 0.36, 0.52).darkened(clampf(-h / 10.0, 0.0, 0.5))
-			elif h < 1.6:
-				c = Color(0.84, 0.78, 0.56)
 			else:
-				c = Color(0.38, 0.56, 0.27).lerp(Color(0.52, 0.52, 0.42), clampf((h - 4.0) / 18.0, 0.0, 1.0))
+				c = _type_color(ground_type(wx, wz), wx, wz).lightened(0.12)
 				var shade := height_at(wx + 2.0, wz + 2.0) - h
 				c = c.darkened(clampf(shade * 0.08, -0.15, 0.25))
 			img.set_pixel(x, y, c)
 	map_texture = ImageTexture.create_from_image(img)
 
+# ---------------------------------------------------------------- grass and pebbles
+func _grass() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value + 7
+	var blade := _grass_mesh()
+	var pebble := BoxMesh.new()
+	pebble.size = Vector3(0.22, 0.12, 0.18)
+	var pm := StandardMaterial3D.new()
+	pm.albedo_color = Color(0.45, 0.44, 0.42)
+	pebble.material = pm
+	var chunk := 24.0
+	var n := int(SIZE / chunk)
+	for cj in n:
+		for ci in n:
+			var x0 := -SIZE / 2.0 + ci * chunk
+			var z0 := -SIZE / 2.0 + cj * chunk
+			var g: Array[Transform3D] = []
+			var r: Array[Transform3D] = []
+			for k in 380:
+				var x := x0 + rng.randf() * chunk
+				var z := z0 + rng.randf() * chunk
+				var t := ground_type(x, z)
+				var h := height_at(x, z)
+				if t == "grass":
+					var sc := rng.randf_range(0.7, 1.5)
+					g.append(Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(sc, sc * rng.randf_range(0.8, 1.3), sc)), Vector3(x, h - 0.02, z)))
+				elif (t == "rock" or t == "dirt") and rng.randf() < (0.12 if t == "rock" else 0.03):
+					var sc := rng.randf_range(0.4, 1.6)
+					var b := Basis.from_euler(Vector3(rng.randf() * 0.6, rng.randf() * TAU, rng.randf() * 0.6)).scaled(Vector3(sc, sc, sc))
+					r.append(Transform3D(b, Vector3(x, h, z)))
+			if not g.is_empty():
+				var mmi := _multimesh(blade, g, 75.0)
+				grass_chunks.append([mmi, Vector3(x0 + chunk / 2.0, 0, z0 + chunk / 2.0)])
+			if not r.is_empty():
+				_multimesh(pebble, r, 110.0)
+
+func _multimesh(mesh: Mesh, xforms: Array[Transform3D], vis: float) -> MultiMeshInstance3D:
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mmi.visibility_range_end = vis
+	mmi.visibility_range_end_margin = 10.0
+	add_child(mmi)
+	return mmi
+
+func _grass_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in 5:
+		var a := k * TAU / 5.0 + randf() * 0.4
+		var d := Vector3(cos(a), 0, sin(a))
+		var side := Vector3(-d.z, 0, d.x) * 0.035
+		var base := d * 0.05
+		var tip := d * 0.16 + Vector3(0, 0.42 + randf() * 0.15, 0)
+		for v in [[base - side, Color(0.13, 0.30, 0.08)], [base + side, Color(0.13, 0.30, 0.08)], [tip, Color(0.42, 0.66, 0.22)]]:
+			st.set_normal(Vector3.UP)
+			st.set_color(v[1])
+			st.add_vertex(v[0])
+	var mesh := st.commit()
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.roughness = 1.0
+	mesh.surface_set_material(0, m)
+	return mesh
+
 # ---------------------------------------------------------------- props
 func _vehicles(spawn: Vector3) -> void:
-	var specs := [["res://assets/glb/vehicle_tike.glb", Vector3(5, 0, -4), 2.4],
-				  ["res://assets/glb/vehicle_bike.glb", Vector3(8, 0, -2), 1.2]]
-	for s in specs:
-		var p: Vector3 = spawn + s[1]
-		p.y = height_at(p.x, p.z)
-		var inst: Node3D = load(s[0]).instantiate()
-		inst.set_script(load("res://game/face_tracker.gd"))
-		add_child(inst)
-		inst.global_position = p
-		inst.rotation.y = s[2]
-		inst.call("setup")
+	var specs := [["res://assets/glb/vehicle_tike.glb", "tike", Vector3(5, 0, -4), 2.4],
+				  ["res://assets/glb/vehicle_bike.glb", "bike", Vector3(8, 0, -1), 1.2]]
+	for sp in specs:
+		var p: Vector3 = spawn + sp[2]
+		p.y = height_at(p.x, p.z) + 0.2
+		var v := CharacterBody3D.new()
+		v.set_script(load("res://game/vehicle.gd"))
+		add_child(v)
+		v.setup(sp[0], sp[1])
+		v.global_position = p
+		v.rotation.y = sp[3]
+		vehicles.append(v)

@@ -4,7 +4,7 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.1.0"
+const VERSION := "0.2.0"
 const L_WORLD := 1
 const L_STRUCT := 2
 const L_PLAYER := 4
@@ -50,6 +50,7 @@ func _setup_input() -> void:
 	_key("jump", [KEY_SPACE]); _key("sprint", [KEY_SHIFT]); _key("crouch", [KEY_C])
 	_key("fire", [MOUSE_BUTTON_LEFT]); _key("aim", [MOUSE_BUTTON_RIGHT])
 	_key("reload", [KEY_R]); _key("build", [KEY_B]); _key("craft", [KEY_Q])
+	_key("interact", [KEY_E]); _key("camera", [KEY_V])
 	_key("map", [KEY_M]); _key("ping", [KEY_T]); _key("broadcast", [KEY_Y]); _key("help", [KEY_H])
 	for i in 6:
 		_key("weapon_%d" % (i + 1), [KEY_1 + i])

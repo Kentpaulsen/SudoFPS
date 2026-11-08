@@ -19,6 +19,7 @@ SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse whee
 HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
 CRAFT  Q opens crafting. Sandbag = 1 fibre (bushes) + 2 stone (rocks)
 BUILD  Hold B, flick the mouse to pick a wall, let go. R rotates, left click places, right click exits
+DRIVE  E next to the Tike or Bike. W/S drive, A/D steer, Space brake, V camera, E get out
 MAP  M    Team ping  T    Open broadcast  Y (draws zombies)
 TEST KEYS  K +10 zombies   L +50 zombies   O remove zombies   I stats   U antidote   N +20 sandbags
 Esc lets go of the mouse. H hides this."""
@@ -154,7 +155,7 @@ func _paint() -> void:
 	var c := vs / 2.0
 	var now := Time.get_ticks_msec() / 1000.0
 	# crosshair
-	if not pl.build_mode and not pl.dead:
+	if not pl.build_mode and not pl.dead and pl.vehicle == null:
 		var g = 4.0 if pl.aiming else 7.0
 		for d in [Vector2(1, 0), Vector2(-1, 0), Vector2(0, 1), Vector2(0, -1)]:
 			canvas.draw_line(c + d * g, c + d * (g + 6.0), Color(1, 1, 1, 0.85), 2.0)
@@ -182,6 +183,11 @@ func _paint() -> void:
 		var p: Dictionary = Game.world.PIECES[pl.build_kind]
 		_text(Vector2(0, vs.y - 110), "BUILD: %s  (%d sandbags)" % [p.name, p.cost], 20, PIECE_COL, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
 		_text(Vector2(0, vs.y - 86), "Left click place   R rotate   Mouse wheel change piece   Right click exit", 14, Color(0.85, 0.85, 0.85), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+	if pl.vehicle:
+		_text(Vector2(0, vs.y - 110), "%d km/h" % roundi(absf(pl.vehicle.speed) * 3.6), 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+		_text(Vector2(0, vs.y - 84), "E get out    V camera (test key until the camera stick exists)", 14, Color(0.85, 0.85, 0.85), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+	elif pl.near_vehicle:
+		_text(Vector2(0, c.y + 60), "E  drive the %s" % ("Tike" if pl.near_vehicle.kind == "tike" else "Bike"), 20, Color(1, 0.95, 0.7), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
 	if pl.wheel_open:
 		_wheel(c, pl)
 	# minimap and sector

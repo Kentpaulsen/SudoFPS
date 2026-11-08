@@ -88,7 +88,7 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - 100%: you join the zombie faction. No guns, melee only. Zombies ignore you. Turned players are allied with each other. You keep your health bar and can still be killed.
 - Open: zombie faction win condition, and what ends a Zombie Royale match.
 
-## Vehicles (after multiplayer works)
+## Vehicles
 - Tike: one-seat modified kiddie car (roll cage, knobby tyres, rear engine). Arcade four-wheel handling.
 - Bike: one-seat scrambler. Same arcade handling, cannot fall over, the model leans into corners.
 - Canoe/surfboard for satellite islands.
@@ -114,7 +114,9 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Zombies: 110 at start, growing by ~8 per minute up to 260; hordes every 45-80 s from a named sector.
 - Zombie hit: 9 damage, +11% zombification. Health regenerates after 6 s without damage.
 - Storm: six phases, damage 1-8.5 HP/s depending on phase.
-- Vehicles are parked props only (no driving yet). Camera stick not built yet.
+- Vehicles are drivable offline from v0.2 (play-test request, ahead of the multiplayer plan). They will need network work in the multiplayer release.
+- Third person while driving is on the V key for testing; the camera stick that should gate it is not built yet.
+- Bat removes 2 tree hit points per hit, knife 1 (trees have 5).
 
 ## Pending
 - Kent's review of this document.

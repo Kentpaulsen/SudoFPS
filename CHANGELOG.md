@@ -1,5 +1,14 @@
 # Change log
 
+## Prototype v0.2.0 (2026-11-08)
+Play-test requests: grassier ground, breaking trees with the bat, more realistic guns, driving.
+- Ground: thick grass tufts everywhere grassy, plus dirt patches and rock patches with loose stones. The map shows them too. Grass dies when Hex Horizon passes over it.
+- Trees: the bat chops trees twice as fast as the knife (3 hits). Felled trees tip over and leave a stump, with wood chips and a crack.
+- Guns: new, more detailed models (polymer pistol, UZI with folded stock, pump shotgun, AR-style rifle with a red dot sight, combat knife, taped bat). Aiming with the rifle looks through the red dot.
+- Gun feel: the gun kicks up when fired, casings fly out (red shells from the shotgun), muzzle smoke, the shotgun pump racks, guns lower while sprinting, forearms on screen, gunshots with an echo tail.
+- Driving: E next to the Tike or Bike to get in. W/S drive, A/D steer, Space brakes. The Tike reaches 54 km/h, the Bike 68 km/h and leans into corners. Wheels spin and steer, the steering wheel turns, the eyes look ahead. Running over zombies hurts them. The engine is loud, so it draws zombies.
+- V switches to third person while driving. This is a test key until the craftable camera stick exists.
+
 ## Prototype v0.1.0 (2026-11-08)
 First playable build. Offline sandbox in the browser and on Windows.
 - Procedural island (384 m, new layout every game) with trees, bushes, rocks, beaches and sea.
