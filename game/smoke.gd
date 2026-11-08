@@ -5,10 +5,12 @@ var t := 0.0
 var step := 0
 var shots := ""
 var max_air := 0.0
+var menu = null
 var start_pos := Vector3.ZERO
 var shot_air := false
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS   # keeps running while the pause menu has the game paused
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--shots="):
 			shots = a.substr(8)
@@ -29,6 +31,9 @@ func _shot(name: String) -> void:
 
 func _process(dt: float) -> void:
 	t += dt
+	if "--quick" in OS.get_cmdline_user_args():
+		_quick()
+		return
 	var pl = Game.player
 	var w = Game.world
 	if pl == null:
@@ -155,10 +160,75 @@ func _process(dt: float) -> void:
 	elif step == 13 and t > 27.0:
 		_shot("11_dealership")
 		step = 14
-	elif step == 14 and t > 27.5:
+		Settings.set_preset("Low")
+		Settings.set_preset("Medium")
+		w.day_t = 0.88
+		if w.lamps.size() > 0:
+			var lp: Vector3 = w.lamps[0].global_position
+			var pp: Vector3 = lp + Vector3(9, 0, 9)
+			pp.y = w.height_at(pp.x, pp.z) + 0.1
+			pl.global_position = pp
+			_look_at(lp - Vector3(0, 4, 0))
+	elif step == 14 and t > 29.0:
+		_shot("12_night")
+		step = 15
+		for c in w.get_children():
+			if c.has_method("open_menu"):
+				menu = c
+		menu.open_menu()
+		menu.panel.visible = false
+		menu.settings.visible = true
+	elif step == 15 and t > 30.5:
+		print("SMOKE paused=", get_tree().paused, " mode=", Game.mode)
+		_shot("13_settings")
+		menu.resume()
+		step = 16
+	elif step == 16 and t > 31.0:
 		var d = w.director
 		print("SMOKE fps=", Engine.get_frames_per_second(), " zombies=", d.zombies.size() if d else 0,
 			" chasing=", d.active_count() if d else 0, " hp=", pl.hp, " pieces=", w.pieces.size(),
-			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " buildings=", w.sites.size(), " roads=", w.roads.size(), " ramps=", w.ramps.size(), " storm=", w.storm != null)
+			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " buildings=", w.sites.size(), " roads=", w.roads.size(), " ramps=", w.ramps.size(), " lamps=", w.lamps.size(), " time=", w.clock(), " storm=", w.storm != null)
+		print("SMOKE ok")
+		get_tree().quit()
+
+func _quick() -> void:
+	var pl = Game.player
+	var w = Game.world
+	if pl == null:
+		return
+	if step == 0 and t > 1.0:
+		step = 1
+		var rd = w.roads[0]
+		var p: PackedVector2Array = rd.pts
+		var a: Vector2 = p[p.size() / 2]
+		var b: Vector2 = p[mini(p.size() / 2 + 6, p.size() - 1)]
+		pl.set_physics_process(false)
+		pl.global_position = Vector3(a.x, w.height_at(a.x, a.y) + 0.2, a.y)
+		_look_at(Vector3(b.x, w.height_at(b.x, b.y) + 0.6, b.y))
+		pl.equip(4)
+	elif step == 1 and t > 2.5:
+		step = 2
+		_shot("20_road")
+		for st in w.sites:
+			if st.kind == "supermarket":
+				var dir: Vector2 = (st.door - st.connect).normalized()
+				var c: Vector2 = st.connect - dir * 3.0
+				pl.global_position = Vector3(c.x, w.height_at(c.x, c.y) + 0.2, c.y)
+				var tgt: Vector2 = st.connect + (st.connect - st.door).normalized() * 12.0
+				_look_at(Vector3(tgt.x, w.height_at(tgt.x, tgt.y) - 1.0, tgt.y))
+	elif step == 2 and t > 4.0:
+		step = 3
+		_shot("21_crossing")
+		for c in w.get_children():
+			if c.has_method("open_menu"):
+				menu = c
+		menu.open_menu()
+	elif step == 3 and t > 5.0:
+		step = 4
+		_shot("22_menu")
+		menu.panel.visible = false
+		menu.settings.visible = true
+	elif step == 4 and t > 6.0:
+		_shot("23_settings")
 		print("SMOKE ok")
 		get_tree().quit()

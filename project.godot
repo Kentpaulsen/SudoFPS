@@ -4,8 +4,8 @@ config_version=5
 [application]
 
 config/name="SudoFPS"
-config/description="Prototype v0.4"
-config/version="0.4.1"
+config/description="Prototype v0.5"
+config/version="0.5.0"
 run/main_scene="res://game/main.tscn"
 config/features=PackedStringArray("4.4", "GL Compatibility")
 
@@ -13,6 +13,7 @@ config/features=PackedStringArray("4.4", "GL Compatibility")
 
 Game="*res://game/game.gd"
 Sfx="*res://game/sfx.gd"
+Settings="*res://game/settings.gd"
 
 [display]
 

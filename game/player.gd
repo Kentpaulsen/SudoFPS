@@ -126,7 +126,7 @@ func captured() -> bool:
 	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 func ui_blocking() -> bool:
-	return craft_open or dead or dev_open
+	return craft_open or dead or dev_open or Game.menu_open
 
 # ---------------------------------------------------------------- input
 func _unhandled_input(event: InputEvent) -> void:
@@ -135,9 +135,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if wheel_open:
 			wheel_vec += rel
 			return
-		var s := sens * (0.6 if aiming else 1.0)
+		var s: float = sens * Settings.get_v("sensitivity") * (0.6 if aiming else 1.0)
 		yaw -= rel.x * s
-		pitch = clampf(pitch - rel.y * s, -1.5, 1.5)
+		pitch = clampf(pitch - rel.y * s * (-1.0 if Settings.get_v("invert_y") else 1.0), -1.5, 1.5)
 		sway += rel
 		sway = sway.limit_length(60.0)
 	elif event is InputEventMouseButton and event.pressed:
@@ -645,7 +645,9 @@ func _camera(dt: float) -> void:
 	var k := clampf((zomb - 45.0) / 55.0, 0.0, 1.0)
 	cam.rotation.x = recoil_off + sin(wobble_t * 0.9) * 0.035 * k
 	cam.rotation.z = sin(wobble_t * 1.3) * 0.07 * k
-	cam.fov = lerpf(cam.fov, 52.0 if aiming else 75.0, minf(12.0 * dt, 1.0))
+	var fov: float = Settings.get_v("fov")
+	cam.fov = lerpf(cam.fov, fov * 0.7 if aiming else fov, minf(12.0 * dt, 1.0))
+	cam.far = Settings.get_v("view_distance") + 150.0
 	var want := Vector3.ZERO
 	if vehicle and third_person:
 		want = Vector3(0, 1.3, 5.0)

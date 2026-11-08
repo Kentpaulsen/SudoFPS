@@ -16,6 +16,15 @@ var map_texture: ImageTexture
 var vehicles: Array = []
 var sites: Array = []          # buildings: {kind, pos, rot, half}
 var ramps: Array = []
+var lamps: Array = []          # [OmniLight3D]
+var lamp_mat: StandardMaterial3D
+var lamps_on := false
+var sun: DirectionalLight3D
+var moon: DirectionalLight3D
+var env: Environment
+var sky_mat: ProceduralSkyMaterial
+var day_t := 0.32              # 0.25 sunrise, 0.5 noon, 0.75 sunset
+var grass_mm: Array = []       # [MultiMesh, full count]
 var grass_chunks: Array = []  # [MultiMeshInstance3D, centre]
 var _dirt_n: FastNoiseLite
 var _rock_n: FastNoiseLite
@@ -47,6 +56,7 @@ func _ready() -> void:
 	_bounds()
 	_scatter()
 	_town()
+	_lamps()
 	_ramps()
 	_grass()
 	_map_image()
@@ -65,6 +75,12 @@ func _ready() -> void:
 		storm = Node3D.new()
 		storm.set_script(load("res://game/storm.gd"))
 		add_child(storm)
+	var menu := CanvasLayer.new()
+	menu.set_script(load("res://game/menu.gd"))
+	add_child(menu)
+	Settings.changed.connect(_apply_settings)
+	_apply_settings()
+	_update_sky()
 	hud = CanvasLayer.new()
 	hud.set_script(load("res://game/hud.gd"))
 	add_child(hud)
@@ -76,9 +92,10 @@ func _ready() -> void:
 
 # ---------------------------------------------------------------- environment
 func _environment() -> void:
-	var env := Environment.new()
+	env = Environment.new()
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()
+	sky_mat = sm
 	sm.sky_top_color = Color(0.32, 0.52, 0.82)
 	sm.sky_horizon_color = Color(0.72, 0.80, 0.88)
 	sm.ground_horizon_color = Color(0.72, 0.80, 0.88)
@@ -97,13 +114,19 @@ func _environment() -> void:
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
-	var sun := DirectionalLight3D.new()
+	sun = DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-50, -35, 0)
 	sun.light_energy = 1.0
 	sun.shadow_enabled = true
 	sun.directional_shadow_max_distance = 60.0
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
 	add_child(sun)
+	moon = DirectionalLight3D.new()
+	moon.rotation_degrees = Vector3(-60, 140, 0)
+	moon.light_color = Color(0.55, 0.65, 1.0)
+	moon.light_energy = 0.0
+	moon.shadow_enabled = false
+	add_child(moon)
 
 # ---------------------------------------------------------------- terrain
 func _terrain() -> void:
@@ -484,9 +507,25 @@ func _plan_town() -> void:
 					centre = p
 				break
 	_plan_roads()
+	_seat_sites()
 
 ## Roads: a minimum spanning tree between the entrances, each link routed round water, steep
 ## ground and other buildings, then the ground is smoothed under it.
+## Final pass: the ground inside every footprint and lot is set just under the floor, so later
+## flattening (neighbours, roads) can never push terrain up through a building.
+func _seat_sites() -> void:
+	for st in sites:
+		var target: float = st.pos.y - 0.03
+		for r in st.rects:
+			var rr := (r as Rect2).grow(1.0)
+			var i0 := clampi(floori((rr.position.x + SIZE / 2.0) / RES), 0, N - 1)
+			var i1 := clampi(ceili((rr.end.x + SIZE / 2.0) / RES), 0, N - 1)
+			var j0 := clampi(floori((rr.position.y + SIZE / 2.0) / RES), 0, N - 1)
+			var j1 := clampi(ceili((rr.end.y + SIZE / 2.0) / RES), 0, N - 1)
+			for j in range(j0, j1 + 1):
+				for i in range(i0, i1 + 1):
+					heights[j * N + i] = minf(heights[j * N + i], target) if rr.has_point(Vector2(-SIZE / 2.0 + i * RES, -SIZE / 2.0 + j * RES)) else heights[j * N + i]
+
 func _plan_roads() -> void:
 	var n := sites.size()
 	if n < 2:
@@ -604,7 +643,7 @@ func _flatten_road(rd: Dictionary) -> void:
 				var t := clampf(a.distance_to(c) / maxf(a.distance_to(b), 0.01), 0.0, 1.0)
 				var target := lerpf(smooth[k], smooth[k + 1], t)
 				var kk := j * N + i
-				heights[kk] = lerpf(target, heights[kk], smoothstep(hw - 0.5, hw + 3.0, d))
+				heights[kk] = lerpf(target, heights[kk], smoothstep(hw + 0.6, hw + 3.5, d))
 
 func _town() -> void:
 	var rng := RandomNumberGenerator.new()
@@ -692,59 +731,265 @@ func _parking(st: Dictionary, b: Dictionary, asphalt: Material, paint: Material,
 func _road_meshes(asphalt: Material, paint: Material) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var dash := SurfaceTool.new()
-	dash.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var white := SurfaceTool.new()
+	white.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var yellow := SurfaceTool.new()
+	yellow.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for rd in roads:
-		var p: PackedVector2Array = rd.pts
+		var pts := _resample(rd.pts, 1.5)
 		var hw: float = rd.w / 2.0
-		# resample every 1.5 m
-		var pts := PackedVector2Array()
-		for k in p.size() - 1:
-			var seg := p[k].distance_to(p[k + 1])
-			var steps := maxi(1, int(seg / 1.5))
-			for s2 in steps:
-				pts.append(p[k].lerp(p[k + 1], float(s2) / steps))
-		pts.append(p[p.size() - 1])
+		var main_road := hw >= 2.5
 		var along := 0.0
 		for k in pts.size() - 1:
 			var a := pts[k]
 			var b := pts[k + 1]
-			var dir := (b - a).normalized()
-			var dir_a := (pts[mini(k + 1, pts.size() - 1)] - pts[maxi(k - 1, 0)]).normalized()
-			var dir_b := (pts[mini(k + 2, pts.size() - 1)] - pts[k]).normalized()
-			var sa := dir_a.orthogonal() * hw
-			var sb := dir_b.orthogonal() * hw
-			var v := [a - sa, a + sa, b - sb, b + sb]
-			var v3: Array = []
-			for q in v:
-				v3.append(Vector3(q.x, height_at(q.x, q.y) + 0.06, q.y))
-			for idx in [0, 2, 1, 1, 2, 3]:
-				st.set_normal(Vector3.UP)
-				st.add_vertex(v3[idx])
-			# dashed centre line on full-width roads
-			var seg_len := a.distance_to(b)
-			if hw >= 2.5 and fmod(along, 5.0) < 2.5:
-				var s3 := dir.orthogonal() * 0.08
-				var ya := height_at(a.x, a.y) + 0.075
-				var yb := height_at(b.x, b.y) + 0.075
-				var d4 := [Vector3(a.x - s3.x, ya, a.y - s3.y), Vector3(a.x + s3.x, ya, a.y + s3.y),
-					Vector3(b.x - s3.x, yb, b.y - s3.y), Vector3(b.x + s3.x, yb, b.y + s3.y)]
-				for idx in [0, 2, 1, 1, 2, 3]:
-					dash.set_normal(Vector3.UP)
-					dash.add_vertex(d4[idx])
-			along += seg_len
+			var sa := (pts[mini(k + 1, pts.size() - 1)] - pts[maxi(k - 1, 0)]).normalized().orthogonal()
+			var sb := (pts[mini(k + 2, pts.size() - 1)] - pts[k]).normalized().orthogonal()
+			for lane in 4:
+				_strip(st, a, b, sa, sb, -hw + lane * hw / 2.0, -hw + (lane + 1) * hw / 2.0, 0.07)
+			if main_road:
+				# white edge lines (solid) on both sides
+				_strip(white, a, b, sa, sb, -hw + 0.2, -hw + 0.35, 0.085)
+				_strip(white, a, b, sa, sb, hw - 0.35, hw - 0.2, 0.085)
+				# yellow centre line: 3 m dash, 6 m gap
+				if fmod(along, 9.0) < 3.0:
+					_strip(yellow, a, b, sa, sb, -0.07, 0.07, 0.085)
+			along += a.distance_to(b)
+	# zebra crossings on the road leaving the supermarket, church and dealership
+	for site in sites:
+		if site.kind in ["supermarket", "church", "dealership"]:
+			for rd in roads:
+				var p: PackedVector2Array = rd.pts
+				if rd.w < 5.0 or p.size() < 4:
+					continue
+				var at := -1
+				if p[0].distance_to(site.connect) < 0.5:
+					at = 0
+				elif p[p.size() - 1].distance_to(site.connect) < 0.5:
+					at = p.size() - 1
+				if at >= 0:
+					_crossing(white, p, at, rd.w / 2.0)
+					break
+	for pair in [[st, asphalt], [white, paint], [yellow, _yellow_mat()]]:
+		var m: ArrayMesh = pair[0].commit()
+		if m.get_surface_count() == 0:
+			continue
+		var mi := MeshInstance3D.new()
+		mi.mesh = m
+		mi.material_override = pair[1]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+
+func _yellow_mat() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.95, 0.72, 0.10)
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	return m
+
+func _resample(p: PackedVector2Array, step: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for k in p.size() - 1:
+		var n := maxi(1, int(p[k].distance_to(p[k + 1]) / step))
+		for i in n:
+			out.append(p[k].lerp(p[k + 1], float(i) / n))
+	out.append(p[p.size() - 1])
+	return out
+
+## Quad between offsets o0..o1 across the road, draped on the terrain.
+func _strip(st: SurfaceTool, a: Vector2, b: Vector2, sa: Vector2, sb: Vector2, o0: float, o1: float, lift: float) -> void:
+	var q := [a + sa * o0, a + sa * o1, b + sb * o0, b + sb * o1]
+	var v: Array = []
+	for c in q:
+		v.append(Vector3(c.x, height_at(c.x, c.y) + lift, c.y))
+	for idx in [0, 1, 2, 1, 3, 2]:   # clockwise seen from above = front face in Godot
+		st.set_normal(Vector3.UP)
+		st.add_vertex(v[idx])
+
+## Norwegian zebra crossing: white bars along the road, 0.5 m wide with 0.5 m gaps, 3 m long, plus signs.
+func _crossing(white: SurfaceTool, p: PackedVector2Array, at: int, hw: float) -> void:
+	var dir := (p[1] - p[0]).normalized() if at == 0 else (p[p.size() - 2] - p[p.size() - 1]).normalized()
+	var c := p[at] + dir * 9.0
+	var side := dir.orthogonal()
+	var x := -hw + 0.5
+	while x + 0.5 <= hw - 0.4:
+		var a := c - dir * 1.5 + side * x
+		var b := c + dir * 1.5 + side * x
+		_strip(white, a, b, side, side, 0.0, 0.5, 0.09)
+		x += 1.0
+	for s2 in [-1, 1]:
+		_sign(c + side * s2 * (hw + 0.8), dir)
+
+func _sign(pos: Vector2, facing: Vector2) -> void:
+	var y := height_at(pos.x, pos.y)
+	var root := StaticBody3D.new()
+	root.collision_layer = Game.L_WORLD
+	add_child(root)
+	root.global_position = Vector3(pos.x, y, pos.y)
+	root.rotation.y = atan2(facing.x, facing.y)
+	var grey := StandardMaterial3D.new()
+	grey.albedo_color = Color(0.6, 0.6, 0.62)
+	grey.metallic = 0.6
+	_part(root, CylinderMesh.new(), Vector3(0.06, 2.6, 0.06), Vector3(0, 1.3, 0), grey)
+	var blue := StandardMaterial3D.new()
+	blue.albedo_color = Color(0.05, 0.25, 0.65)
+	_part(root, BoxMesh.new(), Vector3(0.65, 0.65, 0.04), Vector3(0, 2.45, 0), blue)
+	# white triangle with a dark walking figure (simplified), both faces
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for z in [0.025, -0.025]:
+		for v in [Vector3(-0.26, 2.2, z), Vector3(0.26, 2.2, z), Vector3(0, 2.68, z)]:
+			st.set_normal(Vector3(0, 0, signf(z)))
+			st.add_vertex(v)
+	var tri := MeshInstance3D.new()
+	tri.mesh = st.commit()
+	var wm := StandardMaterial3D.new()
+	wm.albedo_color = Color(0.95, 0.95, 0.95)
+	wm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	tri.material_override = wm
+	root.add_child(tri)
+	var dark := StandardMaterial3D.new()
+	dark.albedo_color = Color(0.05, 0.05, 0.05)
+	for z in [0.03, -0.03]:
+		_part(root, BoxMesh.new(), Vector3(0.05, 0.18, 0.01), Vector3(0, 2.36, z), dark)
+		_part(root, BoxMesh.new(), Vector3(0.06, 0.06, 0.01), Vector3(0, 2.49, z), dark)
+	var cs := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 0.08
+	cyl.height = 2.6
+	cs.shape = cyl
+	cs.position.y = 1.3
+	root.add_child(cs)
+
+func _part(parent: Node3D, mesh: PrimitiveMesh, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
+	if mesh is BoxMesh:
+		mesh.size = size
+	elif mesh is CylinderMesh:
+		mesh.top_radius = size.x
+		mesh.bottom_radius = size.x
+		mesh.height = size.y
+	mesh.material = mat
 	var mi := MeshInstance3D.new()
-	mi.mesh = st.commit()
-	mi.material_override = asphalt
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
-	var dm := dash.commit()
-	if dm.get_surface_count() > 0:
-		var di := MeshInstance3D.new()
-		di.mesh = dm
-		di.material_override = paint
-		di.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(di)
+	mi.mesh = mesh
+	mi.position = pos
+	parent.add_child(mi)
+	return mi
+
+# ---------------------------------------------------------------- street lamps and day/night
+func _lamps() -> void:
+	lamp_mat = StandardMaterial3D.new()
+	lamp_mat.albedo_color = Color(0.9, 0.85, 0.7)
+	lamp_mat.emission_enabled = true
+	lamp_mat.emission = Color(1.0, 0.85, 0.55)
+	lamp_mat.emission_energy_multiplier = 0.0
+	var spots: Array = []   # [position, facing towards the road]
+	for rd in roads:
+		if rd.w < 5.0:
+			continue
+		var pts := _resample(rd.pts, 2.0)
+		var hw: float = rd.w / 2.0
+		var k := 6
+		var flip := 1.0
+		while k < pts.size() - 6:
+			var dir := (pts[k + 1] - pts[k - 1]).normalized()
+			var p := pts[k] + dir.orthogonal() * flip * (hw + 0.9)
+			spots.append([p, -dir.orthogonal() * flip])
+			flip = -flip
+			k += 14
+	for site in sites:
+		if site.park != null:
+			var r: Rect2 = site.park
+			for corner in [r.position + Vector2(0.6, 0.6), r.end - Vector2(0.6, 0.6)]:
+				spots.append([corner, (r.get_center() - corner).normalized()])
+	for sp in spots:
+		var p: Vector2 = sp[0]
+		if height_at(p.x, p.y) < 1.0 or in_site(p.x, p.y, -0.5) and not _in_lot(p):
+			continue
+		_lamp(p, sp[1])
+
+func _in_lot(p: Vector2) -> bool:
+	for site in sites:
+		if site.park != null and (site.park as Rect2).has_point(p):
+			return true
+	return false
+
+func _lamp(p: Vector2, toward: Vector2) -> void:
+	var y := height_at(p.x, p.y)
+	var root := StaticBody3D.new()
+	root.collision_layer = Game.L_WORLD
+	add_child(root)
+	root.global_position = Vector3(p.x, y, p.y)
+	root.rotation.y = atan2(toward.x, toward.y)
+	var grey := StandardMaterial3D.new()
+	grey.albedo_color = Color(0.32, 0.33, 0.35)
+	grey.metallic = 0.5
+	_part(root, CylinderMesh.new(), Vector3(0.09, 6.0, 0.09), Vector3(0, 3.0, 0), grey)
+	_part(root, BoxMesh.new(), Vector3(0.08, 0.08, 1.4), Vector3(0, 5.95, 0.65), grey)
+	_part(root, BoxMesh.new(), Vector3(0.35, 0.12, 0.6), Vector3(0, 5.88, 1.25), grey)
+	_part(root, BoxMesh.new(), Vector3(0.3, 0.03, 0.5), Vector3(0, 5.81, 1.25), lamp_mat)
+	var light := OmniLight3D.new()
+	light.position = Vector3(0, 5.6, 1.25)
+	light.omni_range = 15.0
+	light.omni_attenuation = 1.2
+	light.light_color = Color(1.0, 0.82, 0.55)
+	light.light_energy = 2.2
+	light.shadow_enabled = false
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 70.0
+	light.distance_fade_length = 20.0
+	light.visible = false
+	root.add_child(light)
+	lamps.append(light)
+	var cs := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 0.12
+	cyl.height = 6.0
+	cs.shape = cyl
+	cs.position.y = 3.0
+	root.add_child(cs)
+
+func clock() -> String:
+	var h := fmod(day_t * 24.0, 24.0)
+	return "%02d:%02d" % [int(h), int(fmod(h, 1.0) * 60.0)]
+
+func _process(dt: float) -> void:
+	day_t = fmod(day_t + dt / maxf(Settings.get_v("day_length_min") * 60.0, 30.0), 1.0)
+	_update_sky()
+
+func _update_sky() -> void:
+	var ang := (day_t - 0.25) * TAU                 # 0 sunrise, PI/2 noon, PI sunset
+	var elev := sin(ang)
+	sun.basis = Basis.from_euler(Vector3(-ang, deg_to_rad(-35), 0))
+	var day := smoothstep(-0.08, 0.22, elev)
+	var dusk := clampf(1.0 - absf(elev) / 0.25, 0.0, 1.0) * smoothstep(-0.25, 0.0, elev)
+	sun.visible = elev > -0.02
+	sun.light_energy = 1.05 * smoothstep(-0.02, 0.25, elev)
+	sun.light_color = Color(1.0, 0.62, 0.38).lerp(Color(1, 1, 0.97), smoothstep(0.05, 0.4, elev))
+	sun.shadow_enabled = Settings.get_v("shadows") and elev > 0.05
+	moon.light_energy = 0.16 * (1.0 - day)
+	var night_top := Color(0.02, 0.03, 0.07)
+	var night_hor := Color(0.05, 0.07, 0.12)
+	sky_mat.sky_top_color = night_top.lerp(Color(0.32, 0.52, 0.82), day)
+	var hor := night_hor.lerp(Color(0.72, 0.80, 0.88), day).lerp(Color(0.95, 0.55, 0.30), dusk * 0.7)
+	sky_mat.sky_horizon_color = hor
+	sky_mat.ground_horizon_color = hor
+	sky_mat.ground_bottom_color = Color(0.02, 0.03, 0.05).lerp(Color(0.25, 0.32, 0.38), day)
+	env.ambient_light_color = Color(0.30, 0.36, 0.55).lerp(Color(0.66, 0.66, 0.62), day)
+	env.ambient_light_energy = lerpf(0.22, 0.75, day)
+	env.fog_light_color = Color(0.06, 0.08, 0.13).lerp(Color(0.70, 0.78, 0.86), day).lerp(Color(0.9, 0.6, 0.45), dusk * 0.5)
+	var want_on := elev < 0.08
+	if want_on != lamps_on:
+		lamps_on = want_on
+		for l in lamps:
+			l.visible = want_on
+		lamp_mat.emission_energy_multiplier = 3.0 if want_on else 0.0
+
+func _apply_settings() -> void:
+	var g: float = Settings.get_v("grass")
+	for e in grass_mm:
+		(e[0] as MultiMesh).visible_instance_count = int(e[1] * g)
+	env.fog_density = 0.7 / maxf(Settings.get_v("view_distance"), 50.0)
+	if sun:
+		sun.shadow_enabled = Settings.get_v("shadows")
 
 ## Interior spawn points (DayZ: zombies lurk inside buildings).
 func interior_points() -> Array:
@@ -773,6 +1018,7 @@ func _ramps() -> void:
 	rng.seed = seed_value + 909
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.45, 0.33, 0.20)
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var made := 0
 	for t in 400:
 		if made >= 8:
@@ -1252,6 +1498,7 @@ func _grass() -> void:
 					r.append(Transform3D(b, Vector3(x, h, z)))
 			if not g.is_empty():
 				var mmi := _multimesh(blade, g, 75.0)
+				grass_mm.append([mmi.multimesh, g.size()])
 				grass_chunks.append([mmi, Vector3(x0 + chunk / 2.0, 0, z0 + chunk / 2.0)])
 			if not r.is_empty():
 				_multimesh(pebble, r, 110.0)

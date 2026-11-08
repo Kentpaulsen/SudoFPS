@@ -15,16 +15,7 @@ var font: Font
 var _fps_t := 0.0
 var _fps := 0
 
-const HELP := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
-SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
-HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
-CRAFT  Q opens crafting. Sandbag = 1 fibre (bushes) + 2 stone (rocks)
-BUILD  Hold B, flick the mouse to pick a wall, let go. R rotates, left click places, right click exits
-DRIVE  E next to the Tike or Bike. W/S drive, A/D steer, Space brake, G horn, V camera, E get out. Ramps give air!
-DEVELOPER  P opens the developer panel (zombies chase me on/off, god mode, free building)
-MAP  M    Team ping  T    Open broadcast  Y (draws zombies)
-TEST KEYS  K +10 zombies   L +50 zombies   O remove zombies   I stats   U antidote   N +20 sandbags
-Esc lets go of the mouse. H hides this."""
+
 
 func _ready() -> void:
 	font = ThemeDB.fallback_font
@@ -63,9 +54,7 @@ void fragment() {
 
 func _make_craft_panel() -> void:
 	craft_panel = PanelContainer.new()
-	craft_panel.set_anchors_preset(Control.PRESET_CENTER)
-	craft_panel.position = Vector2(-200, -140)
-	craft_panel.custom_minimum_size = Vector2(400, 0)
+	Game.center(craft_panel, Vector2(400, 300))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 10)
 	craft_panel.add_child(box)
@@ -93,9 +82,7 @@ func _make_craft_panel() -> void:
 
 func _make_dev_panel() -> void:
 	dev_panel = PanelContainer.new()
-	dev_panel.set_anchors_preset(Control.PRESET_CENTER)
-	dev_panel.position = Vector2(-210, -170)
-	dev_panel.custom_minimum_size = Vector2(420, 0)
+	Game.center(dev_panel, Vector2(440, 340))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 8)
 	dev_panel.add_child(box)
@@ -138,9 +125,7 @@ func _make_dev_panel() -> void:
 
 func _make_death_panel() -> void:
 	death_panel = PanelContainer.new()
-	death_panel.set_anchors_preset(Control.PRESET_CENTER)
-	death_panel.position = Vector2(-170, -80)
-	death_panel.custom_minimum_size = Vector2(340, 0)
+	Game.center(death_panel, Vector2(340, 150))
 	var box := VBoxContainer.new()
 	death_panel.add_child(box)
 	var t := Label.new()
@@ -247,6 +232,7 @@ func _paint() -> void:
 	var mm := Rect2(Vector2(vs.x - 230, 20), Vector2(210, 210))
 	_map(mm, false)
 	_text(Vector2(mm.position.x, mm.end.y + 22), "Sector  %s" % Game.sector(pl.global_position), 18, Color(0.9, 1, 0.9), HORIZONTAL_ALIGNMENT_CENTER, mm.size.x)
+	_text(Vector2(mm.position.x - 70, 38), Game.world.clock(), 15, Color(1, 0.95, 0.8), HORIZONTAL_ALIGNMENT_RIGHT, 60)
 	var st = Game.world.storm
 	if st:
 		_text(Vector2(mm.position.x - 100, mm.end.y + 46), st.status(), 15, Color(0.85, 0.6, 1.0), HORIZONTAL_ALIGNMENT_RIGHT, mm.size.x + 100)
@@ -278,11 +264,11 @@ func _paint() -> void:
 		my += 26.0
 	# overlays
 	if show_help:
-		_panel_text(c, HELP)
-	elif not pl.captured() and not pl.dead and not pl.craft_open and not pl.dev_open and not Game.smoke:
+		_panel_text(c, Game.HELP_TEXT)
+	elif not pl.captured() and not pl.dead and not pl.craft_open and not pl.dev_open and not Game.smoke and not Game.menu_open:
 		canvas.draw_rect(Rect2(Vector2.ZERO, vs), Color(0, 0, 0, 0.45))
 		_text(Vector2(0, c.y - 150), "CLICK TO PLAY", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
-		_panel_text(c + Vector2(0, 40), HELP)
+		_panel_text(c + Vector2(0, 40), Game.HELP_TEXT)
 
 func _panel_text(center: Vector2, s: String) -> void:
 	var lines := s.split("\n")

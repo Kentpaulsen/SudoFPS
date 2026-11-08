@@ -140,6 +140,18 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 ## Developer mode (v0.3)
 - P opens the developer panel: zombies chase me on/off, god mode, free building, stats, zombie spawn/remove buttons.
 
+## Menus and settings (v0.5)
+- Esc opens the in-game menu: Resume, Settings, Controls, Toggle fullscreen, Main menu, Quit (desktop only). In the browser, Esc releases the mouse and the menu opens by itself.
+- Zombie Royale pauses while the menu is open. Last Standing keeps running (as a multiplayer match will).
+- Settings (saved between sessions): quality preset Low/Medium/High, render scale, shadows, grass density, view distance, fullscreen, VSync, frame rate limit, master volume, field of view, mouse sensitivity, invert Y, day length, and rebindable keys.
+- Settings also reachable from the start screen, with a fullscreen button.
+
+## Day and night, roads (v0.5)
+- Day/night cycle, 14 minutes per day by default (setting 4-40). Sunrise and sunset colours, moonlight at night.
+- Street lamps along the main roads and on parking lots switch on at dusk.
+- Norwegian road markings: yellow dashed centre line (3 m dash, 6 m gap), white solid edge lines, zebra crossings with blue crossing signs outside the supermarket, church and dealership.
+- Buildings: the ground inside every footprint is set just below the floor after all flattening, so no building is ever partly buried.
+
 ## Recorded sounds (v0.4.1)
 - The game loads `assets/audio/<slot>_<nn>.wav/.ogg` automatically and picks a random take per play; generated sounds stay as fallback. Spec: `docs/audio.md`.
 - First recordings in: player_hurt (1), zombie_scream (9 takes cut from two files), reload (2 parts). Originals kept in `assets/audio/raw/`.

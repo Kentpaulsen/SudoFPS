@@ -4,7 +4,17 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.4.1"
+const VERSION := "0.5.0"
+const HELP_TEXT := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
+SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
+HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
+CRAFT  Q opens crafting. Sandbag = 1 fibre (bushes) + 2 stone (rocks)
+BUILD  Hold B, flick the mouse to pick a wall, let go. R rotates, left click places, right click exits
+DRIVE  E next to the Tike or Bike. W/S drive, A/D steer, Space brake, G horn, V camera, E get out. Ramps give air!
+DEVELOPER  P opens the developer panel (zombies chase me on/off, god mode, free building)
+MAP  M    Team ping  T    Open broadcast  Y (draws zombies)
+TEST KEYS  K +10 zombies   L +50 zombies   O remove zombies   I stats   U antidote   N +20 sandbags
+Esc opens the menu (pause, settings, controls, fullscreen). H shows or hides this list."""
 const L_WORLD := 1
 const L_STRUCT := 2
 const L_PLAYER := 4
@@ -16,6 +26,7 @@ var storm_enabled := false
 var zombies_enabled := true
 var world
 var player
+var menu_open := false
 var smoke := false              # automated test run (command line: -- --smoke)
 # developer panel (P)
 var dev_zombies_chase := true
@@ -27,6 +38,17 @@ var _cache := {}
 func _ready() -> void:
 	_setup_input()
 	smoke = "--smoke" in OS.get_cmdline_user_args()
+
+## Centre a fixed-size panel on screen (anchors in the middle, offsets half the size each way).
+func center(c: Control, size: Vector2) -> void:
+	c.custom_minimum_size = size
+	c.set_anchors_preset(Control.PRESET_CENTER)
+	c.offset_left = -size.x / 2.0
+	c.offset_right = size.x / 2.0
+	c.offset_top = -size.y / 2.0
+	c.offset_bottom = size.y / 2.0
+	c.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	c.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 func make_noise(pos: Vector3, radius: float) -> void:
 	noise.emit(pos, radius)

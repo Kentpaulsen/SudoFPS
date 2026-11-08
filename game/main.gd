@@ -2,6 +2,7 @@ extends Node
 ## Start menu. Picks a sandbox mode and starts the world.
 
 var ui: CanvasLayer
+var settings_panel: Control
 
 func _ready() -> void:
 	if Game.smoke:
@@ -32,8 +33,21 @@ func _ready() -> void:
 	box.add_child(sub)
 	box.add_child(_button("Last Standing   (Hex Horizon storm, no zombies)", "last_standing"))
 	box.add_child(_button("Zombie Royale   (zombies, no storm)", "zombie"))
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	box.add_child(row)
+	for spec in [["Settings", func(): settings_panel.visible = true], ["Fullscreen", func(): Settings.toggle_fullscreen()]]:
+		var b := Button.new()
+		b.text = spec[0]
+		b.custom_minimum_size = Vector2(275, 44)
+		b.pressed.connect(spec[1])
+		row.add_child(b)
+	settings_panel = load("res://game/settings_ui.gd").new()
+	settings_panel.visible = false
+	settings_panel.closed.connect(func(): settings_panel.visible = false)
+	ui.add_child(settings_panel)
 	var help := Label.new()
-	help.text = "Click the game to grab the mouse. Esc lets go of it.\nPress H in game for all controls."
+	help.text = "Esc in game opens the menu (pause, settings, controls).\nPress H in game for all controls."
 	help.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	help.modulate = Color(0.6, 0.65, 0.7)
 	box.add_child(help)

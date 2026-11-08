@@ -1,5 +1,15 @@
 # Change log
 
+## Prototype v0.5.0 (2026-11-08)
+- Pause menu on Esc: Resume, Settings, Controls, Toggle fullscreen, Main menu. Zombie Royale pauses while it is open; Last Standing keeps going.
+- Settings, remembered between sessions: Low/Medium/High quality, render scale, shadows, grass density, view distance, fullscreen, VSync, frame rate limit, volume, field of view, mouse sensitivity, invert mouse, day length, and change any key.
+- Fullscreen from the start screen, the menu or Settings.
+- Day and night: the sun moves, sunsets turn the sky orange, nights are dark and moonlit.
+- Street lamps along the roads and on the parking lots light up at night.
+- Norwegian roads: yellow dashed centre line, white edge lines, zebra crossings with crossing signs outside the supermarket, church and dealership.
+- Fix: roads were not being drawn (only the ground colour showed); asphalt now drapes properly over the ground.
+- Fix: buildings can no longer end up partly under the ground.
+
 ## Prototype v0.4.1 (2026-11-08)
 - Your own recordings are in: the damage scream when you get hurt, 9 zombie screams (cut from your two files, picked at random), and 3 reload sounds (all five files used).
 - The game now loads any recording put in assets/audio with the right slot name, and falls back to the generated sounds for the rest.
