@@ -10,6 +10,10 @@ set -euo pipefail
 REPO_RAW="https://raw.githubusercontent.com/Kentpaulsen/SudoFPS/${REF:-main}/server"
 DOMAIN="${DOMAIN:-pixelescape.notnow.no}"
 CADDY="${CADDY:-0}"
+# Listen address: keep what an earlier install used, else localhost. Use RELAY_HOST=0.0.0.0 when a
+# reverse proxy on another machine (e.g. Nginx Proxy Manager) forwards to this container.
+OLD_HOST=$(sed -n 's/^Environment=RELAY_HOST=//p' /etc/systemd/system/pixelescape-relay.service 2>/dev/null || true)
+RELAY_HOST="${RELAY_HOST:-${OLD_HOST:-127.0.0.1}}"
 
 if [ "$(id -u)" -ne 0 ]; then echo "Run as root."; exit 1; fi
 
@@ -24,7 +28,7 @@ mkdir -p /opt/pixelescape
 curl -fsSL "$REPO_RAW/relay.py" -o /opt/pixelescape/relay.py
 chown -R pixelescape:pixelescape /opt/pixelescape
 
-cat >/etc/systemd/system/pixelescape-relay.service <<'EOF'
+cat >/etc/systemd/system/pixelescape-relay.service <<EOF
 [Unit]
 Description=PixelEscape relay server
 After=network-online.target
@@ -33,7 +37,7 @@ Wants=network-online.target
 [Service]
 User=pixelescape
 ExecStart=/usr/bin/python3 /opt/pixelescape/relay.py
-Environment=RELAY_HOST=127.0.0.1
+Environment=RELAY_HOST=$RELAY_HOST
 Environment=RELAY_PORT=8090
 Restart=always
 RestartSec=3
@@ -68,7 +72,7 @@ fi
 sleep 1
 echo "== Health check"
 if curl -fsS http://127.0.0.1:8090/; then
-  echo "Relay is running on 127.0.0.1:8090."
+  echo "Relay is running on $RELAY_HOST:8090."
 else
   echo "Relay did not answer. Check: journalctl -u pixelescape-relay -n 50"
   exit 1
