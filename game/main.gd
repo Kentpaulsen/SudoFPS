@@ -48,6 +48,14 @@ func _ready() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--lobbyshot="):
 			shot_dir = a.substr(12)
+		if a.begins_with("--mptest="):
+			look = Game.my_look()
+			var mt := Node.new()
+			mt.set_script(load("res://game/mptest.gd"))
+			mt.main = self
+			add_child(mt)
+			Net.started.connect(_on_started)
+			return
 		if a == "--nettest":
 			var nt := Node.new()
 			nt.set_script(load("res://game/nettest.gd"))
@@ -473,7 +481,7 @@ func _refresh_party() -> void:
 	code_label.text = Net.code if online else ""
 	match Net.state:
 		Net.OFFLINE: party_status.text = "Play alone, or create a party and give your friends the code. Up to 8 players."
-		Net.CONNECTING: party_status.text = "Connecting to pixelescape.notnow.no ..."
+		Net.CONNECTING: party_status.text = "Connecting to %s ..." % Net.relay_url().replace("wss://", "")
 		Net.HOSTING: party_status.text = "You are the host (%d in party). Friends type this code under Join:" % Net.members.size()
 		Net.JOINED: party_status.text = "In %s's party (%d players). The host picks the mode and presses PLAY." % [Net._name_of(1), Net.members.size()]
 	if online and not Net.is_host():

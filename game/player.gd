@@ -74,6 +74,9 @@ var third_person := false
 var sprinting := false
 var _vyaw := 0.0
 var gun_kick := 0.0
+var hurt_by := 0                # party game: who shot us last (0 = not a player)
+var last_cause := ""
+var dead_since := 0.0
 var build_mode := false
 var build_kind := 0
 var build_rot := 0
@@ -265,6 +268,8 @@ func _actions(cap: bool) -> void:
 			enter_vehicle(interact_target)
 		elif interact_kind == "door":
 			interact_target.toggle()
+			if Game.world.sync:
+				Net.send(0, "door", Game.world.doors.find(interact_target))
 		elif interact_kind == "npc":
 			talk_to(interact_target)
 	if Input.is_action_just_pressed("camera") and vehicle:
@@ -475,6 +480,8 @@ func fire() -> void:
 				head_marker = r == 2
 		if p < 3:
 			Game.world.tracer(muzzle_pos, end)
+		if p == 0 and Game.world.sync:
+			Net.send(0, "shot", [muzzle_pos, end, w.snd])
 	recoil_off += w.recoil * (0.55 if aiming else 1.0)
 	yaw += randf_range(-1.0, 1.0) * w.recoil * 0.25
 	pitch = clampf(pitch + w.recoil * 0.35, -1.5, 1.5)
@@ -781,6 +788,8 @@ func zombie_hit(dmg: float, infection: float) -> void:
 	if dead:
 		return
 	var before := zomb
+	hurt_by = 0
+	last_cause = "zombies"
 	if not Game.dev_god:
 		zomb = minf(100.0, zomb + infection)
 	Sfx.play("hurt")
@@ -795,6 +804,10 @@ func zombie_hit(dmg: float, infection: float) -> void:
 func die() -> void:
 	exit_vehicle()
 	dead = true
+	dead_since = Time.get_ticks_msec() / 1000.0
+	if Game.world.sync:
+		var cause := last_cause if last_cause != "" else ("the storm" if Game.storm_enabled else "an accident")
+		Game.world.sync.announce_death(hurt_by, cause)
 	build_mode = false
 	_clear_ghost()
 	craft_open = false
@@ -813,6 +826,8 @@ func respawn() -> void:
 	hp = 100.0
 	zomb = 0.0
 	dead = false
+	hurt_by = 0
+	last_cause = ""
 	for i in W.size():
 		ammo[i] = W[i].get("mag", 0)
 	equip(0)

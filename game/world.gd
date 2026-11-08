@@ -19,6 +19,7 @@ var ramps: Array = []
 var lamps: Array = []          # [OmniLight3D]
 var doors: Array = []
 var hangar = null
+var sync = null                 # netsync.gd in a party game
 var npc: Node3D
 var lamp_mat: StandardMaterial3D
 var lamps_on := false
@@ -70,10 +71,18 @@ func _ready() -> void:
 	add_child(player)
 	player.global_position = spawn + Vector3(0, 0.2, 0)
 	_vehicles(spawn)
+	if Net.is_party_game():
+		sync = Node3D.new()
+		sync.set_script(load("res://game/netsync.gd"))
+		sync.name = "NetSync"
+		add_child(sync)
 	if Game.zombies_enabled:
-		director = Node3D.new()
-		director.set_script(load("res://game/zombies.gd"))
-		add_child(director)
+		if Net.is_guest_game():
+			director = sync        # the host runs the zombies; we show copies
+		else:
+			director = Node3D.new()
+			director.set_script(load("res://game/zombies.gd"))
+			add_child(director)
 	if Game.storm_enabled:
 		storm = Node3D.new()
 		storm.set_script(load("res://game/storm.gd"))
@@ -356,6 +365,7 @@ func _scatter() -> void:
 			var res: String = {"tree": "wood", "rock": "stone", "bush": "fibre"}[kind]
 			root.set_meta("res", res)
 			root.set_meta("hp", {"tree": 5, "rock": 8, "bush": 2}[kind])
+			_tag_resource(root)
 			if kind == "bush":
 				var sb := StaticBody3D.new()
 				sb.collision_layer = Game.L_HARVEST
@@ -1291,6 +1301,17 @@ func remove_remote(id: int) -> void:
 		remotes[id].queue_free()
 		remotes.erase(id)
 
+## Players the zombies can go for: our own player and (on the host) the other party members.
+func zombie_targets(all := false) -> Array:
+	var out: Array = []
+	if player and (all or player.is_targetable()):
+		out.append(player)
+	for id in remotes:
+		var r = remotes[id]
+		if all or r.is_targetable():
+			out.append(r)
+	return out
+
 func refresh_remotes() -> void:
 	for id in remotes:
 		remotes[id].refresh_member()
@@ -1383,6 +1404,7 @@ func _pines(grid: Dictionary, rng: RandomNumberGenerator) -> void:
 			var root := Game.place_static(pine_d, xf, self, Game.L_WORLD, 240.0)
 			root.set_meta("res", "wood")
 			root.set_meta("hp", 5)
+			_tag_resource(root)
 			for ch in root.get_children():
 				if ch is StaticBody3D:
 					ch.set_meta("owner_root", root)
@@ -1402,12 +1424,31 @@ func _free(grid: Dictionary, x: float, z: float, r: float) -> bool:
 ## Melee hit on a resource. Returns {res: amount} gathered (empty if not a resource).
 ## Melee hit on a resource. power = hit points removed (the bat hits trees for 2).
 ## Returns {res: amount} gathered (empty if not a resource).
+## Trees, rocks and bushes get an id in creation order (the same on every machine with the same seed).
+var res_by_id := {}
+var _next_rid := 0
+func _tag_resource(root: Node3D) -> void:
+	root.set_meta("rid", _next_rid)
+	res_by_id[_next_rid] = root
+	_next_rid += 1
+
+## Another player harvested something: same shake / fall here, no materials for us.
+func harvest_remote(rid: int, power: int) -> void:
+	var root = res_by_id.get(rid)
+	if root and is_instance_valid(root) and root.get_meta("hp", 0) > 0:
+		_harvest_root(root, power, true)
+
 func server_harvest(body: Object, power := 1) -> Dictionary:
 	if not (body is Node) or not body.has_meta("owner_root"):
 		return {}
 	var root: Node3D = body.get_meta("owner_root")
 	if not is_instance_valid(root) or root.get_meta("hp", 0) <= 0:
 		return {}
+	if sync and root.has_meta("rid"):
+		Net.send(0, "harv", [root.get_meta("rid"), power])
+	return _harvest_root(root, power, false)
+
+func _harvest_root(root: Node3D, power: int, remote: bool) -> Dictionary:
 	var res: String = root.get_meta("res")
 	var hp: int = root.get_meta("hp") - power
 	root.set_meta("hp", hp)
@@ -1428,7 +1469,8 @@ func server_harvest(body: Object, power := 1) -> Dictionary:
 		tw.tween_property(root, "basis", rest.rotated(axis, 0.06), 0.05)
 		tw.tween_property(root, "basis", rest.rotated(axis, -0.03), 0.07)
 		tw.tween_property(root, "basis", rest, 0.08)
-	Game.make_noise(root.global_position, 18.0)
+	if not remote:
+		Game.make_noise(root.global_position, 18.0)
 	return out
 
 func _remove_resource(root: Node3D, fall: bool) -> void:
@@ -1551,7 +1593,9 @@ func piece_slot(kind: int, aim: Vector3, rot: int) -> Dictionary:
 			free = false
 	return {"xform": Transform3D(basis, pos), "edges": edges, "free": free, "dry": y > 0.15}
 
-func server_build(kind: int, slot: Dictionary) -> Node3D:
+func server_build(kind: int, slot: Dictionary, remote := false) -> Node3D:
+	if sync and not remote:
+		Net.send(0, "build", [kind, slot.xform, slot.edges])
 	var d := Game.asset(PIECES[kind].glb)
 	var root := Game.place_static(d, slot.xform, self, Game.L_STRUCT)
 	# foundation under the piece for sloped ground

@@ -162,7 +162,11 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 ## Multiplayer with join codes (decided 2026-11-08, first version in v0.8)
 - Code-based relay: `server/relay.py` on the homelab (Proxmox LXC, Debian 13) pairs players by a 5-letter code and forwards their game traffic over WebSocket. No TURN server, no UDP ports. Public address wss://pixelescape.notnow.no via Cloudflare (proxied) and Nginx Proxy Manager to the container on port 8090.
 - The host player's game is the authority. Everyone builds the same island from the host's seed.
-- Staging: v0.8 lobby, party and seeing each other (walk, drive, fly, name tags, late joining). Next: shooting and damage between players, zombies run by the host, vehicles, doors, building, harvesting, storm and time of day.
+- Staging: v0.8 lobby, party and seeing each other (walk, drive, fly, name tags, late joining). v0.9: zombies run by the host (guests see puppets that send their hits to the host), shots, PvP, deaths, building, harvesting, doors, storm and time of day. Next: shared vehicles, loot, rounds and winners.
+- Player damage (decided 2026-11-08): PvP in Last Standing only. Zombie Royale is co-op, no friendly fire.
+- Death in a party game (decided 2026-11-08): respawn after 10 s at a random spot for now. Proper rounds with spectating and a winner come later.
+- Hits between players are decided by the shooter's machine and sent to the victim (simple and responsive; fine among friends, not cheat-proof).
+- Hosting the game (proposed 2026-11-08): GitHub Pages serves the game on pixelescape.notnow.no; the relay moves to pixelescape-relay.notnow.no. One name for both would route every download through the homelab.
 - Party size: up to 8 (relay limit).
 
 ## Lobby and characters (v0.8)

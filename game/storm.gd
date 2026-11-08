@@ -17,8 +17,10 @@ var timer := 0.0
 var wall: MeshInstance3D
 var _veg_t := 0.0
 var _crackle_t := 0.0
+var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
+	_rng.seed = Game.world.seed_value + 4040     # same storm path for everyone on this island
 	wall = MeshInstance3D.new()
 	wall.mesh = _hex_mesh()
 	wall.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -84,11 +86,27 @@ func _plan_next() -> void:
 	var w = Game.world
 	next_c = center
 	for i in 40:
-		var off := Vector2.from_angle(randf() * TAU) * randf() * room
+		var off := Vector2.from_angle(_rng.randf() * TAU) * _rng.randf() * room
 		var c := center + off
 		if w.is_land(c.x, c.y, 0.5, 40.0) or i == 39:
 			next_c = c
 			break
+
+## Party game: the host's storm is the truth; guests take it every 2 s.
+func net_state() -> Dictionary:
+	return {"c": center, "r": radius, "fc": from_c, "fr": from_r, "nc": next_c, "nr": next_r, "ph": phase, "st": state, "t": timer}
+
+func net_apply(d: Dictionary) -> void:
+	center = d.c
+	radius = d.r
+	from_c = d.fc
+	from_r = d.fr
+	next_c = d.nc
+	next_r = d.nr
+	phase = int(d.ph)
+	state = str(d.st)
+	timer = float(d.t)
+	_apply()
 
 func _process(dt: float) -> void:
 	timer -= dt

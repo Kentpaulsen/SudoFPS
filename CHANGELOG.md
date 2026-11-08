@@ -1,5 +1,16 @@
 # Change log
 
+## Prototype v0.9.0 (2026-11-08)
+- Multiplayer round two. In a party game:
+  - Zombies are run by the host and are the same for everyone. They chase and attack any player, hear everyone's shots and noise, and hordes can come for any of you. Shooting a zombie on your screen hurts the real one, and your kills count.
+  - Shots: you hear other players' shots and see their tracers.
+  - Last Standing: you can shoot each other ("X eliminated Y" shows for everyone). Zombie Royale: no friendly fire, bullets pass through friends.
+  - Dead players come back after 10 seconds at a random spot. Everyone sees who died and why.
+  - Building, chopping trees, breaking rocks and bushes, doors and the hangar roof show up for everyone. Materials go to whoever harvested.
+  - Time of day and the Hex Horizon storm follow the host.
+- The game tries the relay at pixelescape-relay.notnow.no first, then pixelescape.notnow.no, so the game itself can move to pixelescape.notnow.no.
+- Still not synced: vehicles parked or left behind (each player has their own), Bjørn's handouts, loot.
+
 ## Prototype v0.8.0 (2026-11-08)
 - The game is now called PixelEscape. The Windows download is PixelEscape-windows.zip.
 - New lobby instead of the start menu: your character on a pedestal (drag to turn), a character builder, nickname, game mode card and a big PLAY button. Settings and fullscreen top right.

@@ -31,6 +31,15 @@ var sep := Vector3.ZERO
 var anim_t := 0.0
 var groan_t := 0.0
 var alerted := false
+# multiplayer
+var zid := 0                    # id shared with guests
+var outfit := 0
+var prey = null                 # the player (local or remote) this zombie is after
+var _prey_t := 0.0
+var puppet := false             # guest side: a copy that follows the host's zombie
+var net_pos := Vector3.ZERO
+var net_yaw := 0.0
+var net_seen := 0.0
 
 func setup(parts: Dictionary, d: Node) -> void:
 	director = d
@@ -62,6 +71,55 @@ func setup(parts: Dictionary, d: Node) -> void:
 	groan_t = randf_range(2.0, 9.0)
 	_idle_pose()
 	set_physics_process(false)
+	set_process(false)
+
+## Guest side: no AI, follows the host's snapshots. Still shootable; hits go to the host.
+func make_puppet(pos: Vector3, yaw: float) -> void:
+	puppet = true
+	net_pos = pos
+	net_yaw = yaw
+	global_position = pos
+	rotation.y = yaw
+	collision_mask = 0
+	set_physics_process(false)
+	set_process(true)
+
+func net_update(pos: Vector3, yaw: float, st: int, swiping: bool) -> void:
+	net_pos = pos
+	net_yaw = yaw
+	net_seen = 0.0
+	if state == DEAD:
+		return
+	if st != state:
+		state = st
+		if st == IDLE:
+			_idle_pose()
+	if swiping and swipe < 0.3:
+		swipe = 1.0
+
+func _process(dt: float) -> void:
+	if not puppet or state == DEAD:
+		return
+	net_seen += dt
+	var prev := global_position
+	if global_position.distance_to(net_pos) > 6.0:
+		global_position = net_pos
+	else:
+		global_position = global_position.lerp(net_pos, minf(dt * 10.0, 1.0))
+	rotation.y = lerp_angle(rotation.y, net_yaw, minf(dt * 10.0, 1.0))
+	velocity = (global_position - prev) / maxf(dt, 0.001)
+	if state != IDLE:
+		_animate(dt)
+
+## Nearest player the zombies can go for (the host's own player and the guests).
+func _pick_prey() -> void:
+	var best := INF
+	prey = null
+	for t in Game.world.zombie_targets():
+		var d: float = t.global_position.distance_squared_to(global_position)
+		if d < best:
+			best = d
+			prey = t
 
 func _limb(parent: Node3D, mesh: Mesh, at: Vector3) -> Node3D:
 	var pivot := Node3D.new()
@@ -104,12 +162,15 @@ func go_idle() -> void:
 	set_physics_process(false)
 
 func _physics_process(dt: float) -> void:
-	var pl = Game.player
 	if state == CHASE:
-		if pl == null or not pl.is_targetable():
+		_prey_t -= dt
+		if _prey_t <= 0.0 or not is_instance_valid(prey) or not prey.is_targetable():
+			_prey_t = 0.5
+			_pick_prey()
+		if prey == null:
 			go_idle()
 			return
-		target = pl.global_position
+		target = prey.global_position
 		if global_position.distance_to(target) > 90.0:
 			lost_t += dt
 			if lost_t > 8.0:
@@ -135,7 +196,7 @@ func _physics_process(dt: float) -> void:
 		if attack_cd <= 0.0 and absf(target.y - global_position.y) < 1.6 and stun <= 0.0:
 			attack_cd = 1.0
 			swipe = 1.0
-			pl.zombie_hit(9.0, 11.0)
+			prey.zombie_hit(9.0, 11.0)
 	var a := minf(7.0 * dt, 1.0)
 	velocity.x = lerpf(velocity.x, want.x, a)
 	velocity.z = lerpf(velocity.z, want.z, a)
@@ -161,6 +222,7 @@ func _physics_process(dt: float) -> void:
 	groan_t -= dt
 	if groan_t <= 0.0:
 		groan_t = randf_range(4.0, 11.0)
+		var pl = Game.player
 		if pl and global_position.distance_to(pl.global_position) < 35.0:
 			Sfx.play3d("groan", global_position + Vector3(0, 1.6, 0), -4.0)
 
@@ -193,6 +255,10 @@ func _animate(dt: float) -> void:
 
 func take_damage(dmg: float, knock: Vector3, _dir: Vector3) -> void:
 	if state == DEAD:
+		return
+	if puppet:
+		flinch = 1.0
+		director.puppet_hit(self, dmg, knock)
 		return
 	hp -= dmg
 	flinch = 1.0

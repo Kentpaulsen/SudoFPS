@@ -1,6 +1,7 @@
 extends Node3D
 ## Another player in the party, as seen on this machine. Smoothly follows the states that arrive
-## over the relay (15 per second). Visual only in this version: no collision, no damage.
+## over the relay (15 per second). Zombies on the host chase it like the host's own player; in Last
+## Standing it has a hit box and shots on it are sent to that player.
 
 const VEHICLE_GLB := {"tike": "res://assets/glb/vehicle_tike.glb", "bike": "res://assets/glb/vehicle_bike.glb",
 	"atv": "res://assets/glb/vehicle_atv.glb", "sedan": "res://assets/glb/vehicle_sedan.glb", "heli": "res://assets/glb/vehicle_heli.glb"}
@@ -16,6 +17,10 @@ var vkind := ""
 var vmodel: Node3D
 var rotor: Node3D
 var _first := true
+var dead := false
+var crouching := false
+var zomb := 0.0
+var hitbox: AnimatableBody3D
 
 func setup(pid: int) -> void:
 	id = pid
@@ -29,6 +34,28 @@ func setup(pid: int) -> void:
 	tag.position = Vector3(0, 2.15, 0)
 	add_child(tag)
 	refresh_member()
+	if Game.mode == "last_standing":     # PvP: shots can hit this player
+		hitbox = AnimatableBody3D.new()
+		hitbox.sync_to_physics = false
+		hitbox.collision_layer = Game.L_ZOMBIE
+		hitbox.collision_mask = 0
+		hitbox.set_script(load("res://game/remote_hitbox.gd"))
+		hitbox.owner_id = pid
+		var cs := CollisionShape3D.new()
+		var cap := CapsuleShape3D.new()
+		cap.radius = 0.32
+		cap.height = 1.8
+		cs.shape = cap
+		cs.position.y = 0.9
+		hitbox.add_child(cs)
+		add_child(hitbox)
+
+## Zombies (host side): same interface as the local player.
+func is_targetable() -> bool:
+	return not dead and zomb < 100.0
+
+func zombie_hit(dmg: float, infection: float) -> void:
+	Net.send(id, "zhit", [dmg, infection])
 
 ## Name and look come from the party list (they can change in the lobby).
 func refresh_member() -> void:
@@ -48,7 +75,12 @@ func apply_state(d: Dictionary) -> void:
 	target_pos = d.get("p", target_pos)
 	target_yaw = d.get("y", target_yaw)
 	speed = d.get("s", 0.0)
-	visible = not d.get("d", false)
+	dead = d.get("d", false)
+	crouching = d.get("c", false)
+	zomb = d.get("z", 0.0)
+	visible = not dead
+	if hitbox:
+		hitbox.collision_layer = 0 if dead or d.get("v", "") != "" else Game.L_ZOMBIE
 	var vk: String = d.get("v", "")
 	if vk != vkind:
 		_set_vehicle(vk)

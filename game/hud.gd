@@ -7,6 +7,7 @@ var fx: ColorRect
 var fx_mat: ShaderMaterial
 var craft_panel: PanelContainer
 var death_panel: PanelContainer
+var respawn_btn: Button
 var dev_panel: PanelContainer
 var talk_panel: PanelContainer
 var cam_fx: ColorRect
@@ -238,6 +239,7 @@ func _make_death_panel() -> void:
 	b.custom_minimum_size = Vector2(0, 50)
 	b.pressed.connect(func(): Game.player.respawn())
 	box.add_child(b)
+	respawn_btn = b
 	death_panel.visible = false
 	add_child(death_panel)
 
@@ -255,6 +257,16 @@ func _process(dt: float) -> void:
 		_fps = int(Engine.get_frames_per_second())
 	craft_panel.visible = pl.craft_open
 	death_panel.visible = pl.dead
+	if pl.dead and Net.is_party_game():
+		# party game: back in after 10 s at a random spot
+		var left: float = 10.0 - (Time.get_ticks_msec() / 1000.0 - pl.dead_since)
+		respawn_btn.disabled = true
+		respawn_btn.text = "Respawn in %d" % ceili(maxf(left, 0.0))
+		if left <= 0.0:
+			pl.respawn()
+	elif respawn_btn:
+		respawn_btn.disabled = false
+		respawn_btn.text = "Respawn"
 	dev_panel.visible = pl.dev_open
 	if pl.talk_open and not talk_panel.visible:
 		_show_talk(pl.talk_npc)

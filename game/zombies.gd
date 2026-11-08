@@ -15,6 +15,8 @@ var _sep_t := 0.0
 var _pop_t := 0.0
 var _horde_t := 75.0
 var horde_count := 0
+var by_id := {}                 # zid -> zombie (multiplayer)
+var _next_id := 1
 
 func _ready() -> void:
 	for i in ZombieScript.OUTFITS.size():
@@ -34,7 +36,12 @@ func spawn(pos: Vector3, chase := false) -> CharacterBody3D:
 	var z := CharacterBody3D.new()
 	z.set_script(ZombieScript)
 	add_child(z)
-	z.setup(meshes[randi() % meshes.size()], self)
+	var oi := randi() % meshes.size()
+	z.setup(meshes[oi], self)
+	z.outfit = oi
+	z.zid = _next_id
+	_next_id += 1
+	by_id[z.zid] = z
 	z.global_position = pos + Vector3(0, 0.05, 0)
 	z.rotation.y = randf() * TAU
 	zombies.append(z)
@@ -58,7 +65,11 @@ func _far_point(min_dist: float) -> Vector3:
 		var z = randf_range(-w.SIZE * 0.45, w.SIZE * 0.45)
 		if not w.is_land(x, z, 1.0, 30.0):
 			continue
-		if pl and Vector2(x - pl.global_position.x, z - pl.global_position.z).length() < min_dist:
+		var close := false
+		for t in w.zombie_targets(true):
+			if Vector2(x - t.global_position.x, z - t.global_position.z).length() < min_dist:
+				close = true
+		if close or (pl and Vector2(x - pl.global_position.x, z - pl.global_position.z).length() < min_dist):
 			continue
 		return Vector3(x, w.height_at(x, z), z)
 	return Vector3.INF
@@ -96,7 +107,10 @@ func clear_all() -> void:
 
 func on_dead(z) -> void:
 	zombies.erase(z)
+	by_id.erase(z.zid)
 	kills += 1
+	if Game.world.sync:
+		Game.world.sync.zombie_died(z)
 
 func alert(z, scream: bool) -> void:
 	if not is_instance_valid(z) or z.state == ZombieScript.DEAD or z.alerted:
@@ -129,7 +143,8 @@ func _physics_process(dt: float) -> void:
 	_t += dt
 	if _t > 0.1:
 		_t = 0.0
-		_detect(pl)
+		for t in Game.world.zombie_targets():
+			_detect(t)
 	_sep_t += dt
 	if _sep_t > 0.15:
 		_sep_t = 0.0
@@ -145,15 +160,19 @@ func _physics_process(dt: float) -> void:
 			if p != Vector3.INF:
 				spawn_group(p, randi_range(2, 5))
 	_horde_t -= dt
-	if _horde_t <= 0.0 and pl.is_targetable():
+	var targets: Array = Game.world.zombie_targets()
+	if _horde_t <= 0.0 and not targets.is_empty():
 		horde_count += 1
 		_horde_t = maxf(45.0, 80.0 - horde_count * 4.0)
 		var a := randf() * TAU
-		var c = pl.global_position + Vector3(cos(a), 0, sin(a)) * 65.0
+		var victim = targets.pick_random()
+		var c = victim.global_position + Vector3(cos(a), 0, sin(a)) * 65.0
 		var w = Game.world
 		if w.is_land(c.x, c.z, 0.5, 40.0):
 			spawn_group(c, mini(6 + horde_count * 2, 30), true)
 			Game.msg("HORDE incoming from %s" % Game.sector(c), Color(1, 0.4, 0.3))
+			if w.sync:
+				w.sync.broadcast_msg("HORDE incoming from %s" % Game.sector(c), Color(1, 0.4, 0.3))
 
 func _detect(pl) -> void:
 	if not pl.is_targetable() or zombies.is_empty():

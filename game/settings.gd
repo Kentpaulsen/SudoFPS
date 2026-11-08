@@ -12,7 +12,7 @@ const DEFAULTS := {
 	"preset": "Medium", "render_scale": 0.8, "shadows": true, "grass": 0.6, "view_distance": 250.0,
 	"fullscreen": false, "vsync": true, "max_fps": 0, "fov": 75.0,
 	"sensitivity": 1.0, "invert_y": false, "bodycam": false, "master_volume": 0.9, "day_length_min": 14.0,
-	"nickname": "", "look": {}, "relay": "wss://pixelescape.notnow.no",
+	"nickname": "", "look": {},
 }
 ## Actions the player can rebind, in the order shown in the Controls tab.
 const BINDABLE := [

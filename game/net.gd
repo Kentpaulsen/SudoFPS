@@ -10,6 +10,8 @@ signal left(reason: String)
 
 enum { OFFLINE, CONNECTING, HOSTING, JOINED }
 const SEND_HZ := 15.0
+## Tried in order. The game itself moves to pixelescape.notnow.no (GitHub Pages); the relay to its own name.
+const RELAYS := ["wss://pixelescape-relay.notnow.no", "wss://pixelescape.notnow.no"]
 const Character = preload("res://game/character.gd")
 
 var state := OFFLINE
@@ -24,6 +26,8 @@ var ws: WebSocketPeer
 var _want := ""                 # "host" or "join:CODE" once connected
 var _send_t := 0.0
 var url := ""
+var _relay_i := 0
+var _what := ""
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -32,7 +36,7 @@ func _ready() -> void:
 			url = a.substr(8)
 
 func relay_url() -> String:
-	return url if url != "" else str(Settings.get_v("relay"))
+	return url if url != "" else RELAYS[_relay_i % RELAYS.size()]
 
 func is_online() -> bool:
 	return state == HOSTING or state == JOINED
@@ -40,7 +44,19 @@ func is_online() -> bool:
 func is_host() -> bool:
 	return state == HOSTING
 
+## In a party game as a guest: the host runs the zombies.
+func is_guest_game() -> bool:
+	return state == JOINED and in_game
+
+func is_party_game() -> bool:
+	return is_online() and in_game
+
+## Gameplay message to one member (id) or everyone else (0).
+func send(target: int, type: String, data) -> void:
+	_send(target, type, data)
+
 func host_party() -> void:
+	_relay_i = 0
 	_connect("host")
 
 func join_party(c: String) -> void:
@@ -48,6 +64,7 @@ func join_party(c: String) -> void:
 	if c.length() < 4:
 		failed.emit("Type the 5-letter code from your friend")
 		return
+	_relay_i = 0
 	_connect("join:" + c)
 
 func leave_party() -> void:
@@ -77,6 +94,7 @@ func _connect(what: String) -> void:
 		failed.emit("Could not reach the server")
 		return
 	_want = what
+	_what = what
 	state = CONNECTING
 	status_changed.emit()
 
@@ -134,6 +152,10 @@ func _process(dt: float) -> void:
 	if ws and st == WebSocketPeer.STATE_CLOSED:
 		var was := state
 		_reset()
+		if was == CONNECTING and url == "" and _relay_i + 1 < RELAYS.size():
+			_relay_i += 1           # try the next relay address
+			_connect(_what)
+			return
 		if was == CONNECTING:
 			failed.emit("Could not reach the server")
 		elif was != OFFLINE:
@@ -214,13 +236,17 @@ func _on_message(src: int, type: String, data) -> void:
 				started.emit(game_seed, mode)
 		"st":
 			remote[src] = data
-			if Game.world and Game.world.has_method("update_remote"):
+			if is_instance_valid(Game.world) and Game.world.has_method("update_remote"):
 				Game.world.update_remote(src, data)
+		_:
+			# everything else is gameplay: handled by the world's sync node
+			if in_game and is_instance_valid(Game.world) and Game.world.sync:
+				Game.world.sync.on_message(src, type, data)
 
 func _my_state() -> Dictionary:
 	var pl = Game.player
 	var d := {"p": pl.global_position, "y": pl.rotation.y, "s": Vector2(pl.velocity.x, pl.velocity.z).length(),
-		"v": "", "w": pl.cur, "c": pl.crouching, "d": pl.dead}
+		"v": "", "w": pl.cur, "c": pl.crouching, "d": pl.dead, "z": pl.zomb}
 	if pl.vehicle:
 		d.v = pl.vehicle.kind
 		d.p = pl.vehicle.global_position

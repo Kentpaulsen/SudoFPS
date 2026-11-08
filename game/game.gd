@@ -4,7 +4,7 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.8.0"
+const VERSION := "0.9.0"
 const HELP_TEXT := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
 SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
 HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
@@ -72,6 +72,8 @@ func center(c: Control, size: Vector2) -> void:
 
 func make_noise(pos: Vector3, radius: float) -> void:
 	noise.emit(pos, radius)
+	if Net.is_guest_game():
+		Net.send(1, "noise", [pos, radius])     # the host's zombies hear it
 
 func msg(text: String, color := Color(1, 1, 1)) -> void:
 	message.emit(text, color)
