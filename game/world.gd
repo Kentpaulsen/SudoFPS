@@ -52,7 +52,7 @@ const PIECES := [
 
 func _ready() -> void:
 	Game.world = self
-	seed_value = 4242 if Game.smoke else randi()
+	seed_value = Game.seed_override if Game.seed_override >= 0 else (4242 if Game.smoke else randi())
 	_environment()
 	_terrain()
 	_water()
@@ -78,6 +78,9 @@ func _ready() -> void:
 		storm = Node3D.new()
 		storm.set_script(load("res://game/storm.gd"))
 		add_child(storm)
+	if Net.is_online():
+		Net.status_changed.connect(refresh_remotes)
+		Net.left.connect(func(r): Game.msg(r + " You keep playing alone.", Color(1, 0.7, 0.4)))
 	var menu := CanvasLayer.new()
 	menu.set_script(load("res://game/menu.gd"))
 	add_child(menu)
@@ -1269,6 +1272,28 @@ func interior_points() -> Array:
 		for p in pts:
 			out.append(st.pos + b * p + Vector3(0, 0.3, 0))
 	return out
+
+# ---------------------------------------------------------------- multiplayer
+var remotes := {}               # party member id -> remote_player node
+
+func update_remote(id: int, d: Dictionary) -> void:
+	var r = remotes.get(id)
+	if r == null:
+		r = Node3D.new()
+		r.set_script(load("res://game/remote_player.gd"))
+		add_child(r)
+		r.setup(id)
+		remotes[id] = r
+	r.apply_state(d)
+
+func remove_remote(id: int) -> void:
+	if remotes.has(id):
+		remotes[id].queue_free()
+		remotes.erase(id)
+
+func refresh_remotes() -> void:
+	for id in remotes:
+		remotes[id].refresh_member()
 
 func site_of(kind: String):
 	for st in sites:

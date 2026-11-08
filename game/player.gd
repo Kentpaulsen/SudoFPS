@@ -676,33 +676,12 @@ func _camera(dt: float) -> void:
 
 # ---------------------------------------------------------------- health
 func _make_driver_body() -> Node3D:
+	# the lobby character, seated, facing the vehicle's forward (+Z)
 	var root := Node3D.new()
-	var parts := [  # [size, position, colour]; seated pose facing +Z (vehicle forward), origin at the hips
-		[Vector3(0.40, 0.55, 0.24), Vector3(0, 0.30, -0.02), Color(0.035, 0.05, 0.10)],      # jacket
-		[Vector3(0.12, 0.30, 0.01), Vector3(0, 0.40, 0.11), Color(0.92, 0.92, 0.90)],        # shirt
-		[Vector3(0.045, 0.28, 0.012), Vector3(0, 0.38, 0.12), Color(0.45, 0.04, 0.04)],      # tie
-		[Vector3(0.10, 0.10, 0.10), Vector3(0, 0.62, 0), Color(0.62, 0.44, 0.33)],          # neck
-		[Vector3(0.22, 0.25, 0.24), Vector3(0, 0.78, 0), Color(0.62, 0.44, 0.33)],          # head
-		[Vector3(0.24, 0.06, 0.26), Vector3(0, 0.93, -0.01), Color(0.22, 0.14, 0.08)],      # hair
-		[Vector3(0.24, 0.16, 0.04), Vector3(0, 0.84, -0.12), Color(0.22, 0.14, 0.08)],
-		[Vector3(0.36, 0.16, 0.48), Vector3(0, 0.0, 0.2), Color(0.035, 0.05, 0.10)],        # thighs
-		[Vector3(0.34, 0.42, 0.14), Vector3(0, -0.18, 0.42), Color(0.035, 0.05, 0.10)],     # shins
-		[Vector3(0.34, 0.08, 0.24), Vector3(0, -0.38, 0.5), Color(0.02, 0.02, 0.02)],       # shoes
-		[Vector3(0.10, 0.10, 0.42), Vector3(0.24, 0.40, 0.18), Color(0.035, 0.05, 0.10)],   # arms to the wheel
-		[Vector3(0.10, 0.10, 0.42), Vector3(-0.24, 0.40, 0.18), Color(0.035, 0.05, 0.10)],
-		[Vector3(0.09, 0.09, 0.09), Vector3(0.22, 0.40, 0.42), Color(0.62, 0.44, 0.33)],
-		[Vector3(0.09, 0.09, 0.09), Vector3(-0.22, 0.40, 0.42), Color(0.62, 0.44, 0.33)],
-	]
-	for prt in parts:
-		var mi := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = prt[0]
-		var m := StandardMaterial3D.new()
-		m.albedo_color = prt[2]
-		bm.material = m
-		mi.mesh = bm
-		mi.position = prt[1]
-		root.add_child(mi)
+	var c := Game.make_character(Game.my_look())
+	root.add_child(c)
+	c.rotation.y = PI
+	c.sit()
 	return root
 
 ## The nearest thing E can use: a vehicle, a door or Bjørn.

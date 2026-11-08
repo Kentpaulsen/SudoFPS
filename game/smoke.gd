@@ -220,6 +220,7 @@ func _process(dt: float) -> void:
 		print("SMOKE fps=", Engine.get_frames_per_second(), " zombies=", d.zombies.size() if d else 0,
 			" chasing=", d.active_count() if d else 0, " hp=", pl.hp, " pieces=", w.pieces.size(),
 			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " buildings=", w.sites.size(), " roads=", w.roads.size(), " ramps=", w.ramps.size(), " lamps=", w.lamps.size(), " time=", w.clock(), " storm=", w.storm != null)
+		print("SMOKE net state keys=", Net._my_state().keys())
 		print("SMOKE ok")
 		get_tree().quit()
 
@@ -285,5 +286,24 @@ func _quick() -> void:
 		step = 7
 		_shot("44_bodycam_nv")
 		Settings.v["bodycam"] = false
+		pl.nightvision = false
+		w.day_t = 0.4
+		if w.director:
+			w.director.clear_all()
+		# two fake party members: one walking, one on a motorbike
+		Net.members[98] = {"name": "Friend", "look": Game.Character.pack(Game.Character.PRESETS["Hoodie"])}
+		Net.members[99] = {"name": "Rider", "look": Game.Character.pack(Game.Character.PRESETS["Green jacket"])}
+		var fwd: Vector3 = -pl.global_transform.basis.z
+		var side := fwd.cross(Vector3.UP)
+		var p1: Vector3 = pl.global_position + fwd * 4.0 - side * 1.0
+		p1.y = w.height_at(p1.x, p1.z)
+		var p2: Vector3 = pl.global_position + fwd * 7.0 + side * 2.5
+		p2.y = w.height_at(p2.x, p2.z) + 0.1
+		w.update_remote(98, {"p": p1, "y": pl.rotation.y + PI * 0.8, "s": 4.0, "v": "", "d": false})
+		w.update_remote(99, {"p": p2, "y": pl.rotation.y + PI * 0.6, "s": 0.0, "v": "bike", "d": false})
+	elif step == 7 and t > 10.0:
+		step = 8
+		print("SMOKE remotes=", w.remotes.size())
+		_shot("45_remote_players")
 		print("SMOKE ok")
 		get_tree().quit()

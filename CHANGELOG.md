@@ -1,5 +1,15 @@
 # Change log
 
+## Prototype v0.8.0 (2026-11-08)
+- The game is now called PixelEscape. The Windows download is PixelEscape-windows.zip.
+- New lobby instead of the start menu: your character on a pedestal (drag to turn), a character builder, nickname, game mode card and a big PLAY button. Settings and fullscreen top right.
+- Character builder: look preset, skin tone, hair, hair colour, beard, glasses, top, top colour, trousers, trouser colour and feet, plus Random. Saved between sessions. The default look is a navy hoodie with white drawstrings, grey joggers, swept dark-blond hair, barefoot. The old suit look and the eight zombie outfits are kept as presets.
+- Your character is the one you see driving in third person (V).
+- First multiplayer: Create party gives a 5-letter code, friends type it under Join (up to 8). Party members stand on the side pedestals. The host picks the mode and presses PLAY, and everyone lands on the same island and sees each other walk, drive and fly, with name tags. Friends can join a game already running.
+- Not synced yet: shooting and damage between players, zombies (each player has their own), building, harvesting, vehicles left behind, the storm. That is the next round.
+- The Esc menu no longer pauses when you are in a party, and "Main menu" is now "Back to lobby" (you stay in the party).
+- Needs the relay at pixelescape.notnow.no running.
+
 ## Prototype v0.7.2 (2026-11-08)
 - Bjørn now also hands out the helicopter. It is delivered to the helipad in the hangar, not the showroom. Open the roof with the red button and fly out.
 

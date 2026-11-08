@@ -31,9 +31,12 @@ func _ready() -> void:
 	_btn(box, "Settings", func(): panel.visible = false; settings.visible = true)
 	_btn(box, "Controls", func(): panel.visible = false; help_panel.visible = true)
 	_btn(box, "Toggle fullscreen", func(): Settings.toggle_fullscreen())
-	_btn(box, "Main menu", func():
+	_btn(box, "Back to lobby", func():
 		get_tree().paused = false
 		Game.menu_open = false
+		Net.in_game = false
+		Game.player = null
+		Game.world = null
 		get_tree().reload_current_scene())
 	if not OS.has_feature("web"):
 		_btn(box, "Quit game", func(): get_tree().quit())
@@ -73,10 +76,10 @@ func open_menu() -> void:
 	if Game.menu_open:
 		return
 	_set_open(true)
-	title.text = "SudoFPS" if first else ("PAUSED" if Game.mode == "zombie" else "MENU")
+	title.text = "PixelEscape" if first else ("PAUSED" if Game.mode == "zombie" else "MENU")
 	resume_btn.text = "Play" if first else "Resume"
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	if Game.mode == "zombie":
+	if Game.mode == "zombie" and not Net.is_online():
 		get_tree().paused = true
 
 func resume() -> void:

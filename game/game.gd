@@ -4,7 +4,7 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.7.2"
+const VERSION := "0.8.0"
 const HELP_TEXT := """MOVE  W A S D    Sprint  Shift    Jump  Space    Crouch  C
 SHOOT  Left mouse    Aim  Right mouse    Reload  R    Weapons  1-6 or mouse wheel
 HARVEST  Hit trees, rocks and bushes with the knife (5) or bat (6)
@@ -37,6 +37,23 @@ var dev_god := false
 var dev_free_build := false
 
 var _cache := {}
+const Character = preload("res://game/character.gd")
+var seed_override := -1         # multiplayer: everyone in a party builds the same island
+
+## The player's chosen character look (lobby), as a dictionary with Colors.
+func my_look() -> Dictionary:
+	var d = Settings.get_v("look")
+	return Character.unpack(d) if d is Dictionary and not d.is_empty() else Character.default_look()
+
+func my_name() -> String:
+	var n: String = str(Settings.get_v("nickname")).strip_edges()
+	return n if n != "" else "Player"
+
+func make_character(look: Dictionary) -> Node3D:
+	var c := Node3D.new()
+	c.set_script(Character)
+	c.build(look)
+	return c
 
 func _ready() -> void:
 	_setup_input()

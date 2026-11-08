@@ -50,9 +50,9 @@ jobs:
       - name: Export Windows
         run: |
           mkdir -p build/win
-          godot --headless --export-release "Windows Desktop" build/win/SudoFPS.exe
+          godot --headless --export-release "Windows Desktop" build/win/PixelEscape.exe
           command -v zip >/dev/null || (apt-get update -qq && apt-get install -y -qq zip)
-          cd build/win && zip -q -9 ../site/SudoFPS-windows.zip SudoFPS.exe
+          cd build/win && zip -q -9 ../site/PixelEscape-windows.zip PixelEscape.exe
 
       - name: Landing page
         run: |

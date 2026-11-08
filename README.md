@@ -1,4 +1,4 @@
-# SudoFPS
+# PixelEscape (repo: SudoFPS)
 
 Multiplayer first-person shooter for browser and Windows, built in Godot 4. Procedural islands, tactical sandbag and plank building, the Hex Horizon storm, and DayZ-style zombies.
 

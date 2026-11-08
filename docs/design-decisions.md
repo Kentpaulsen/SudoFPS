@@ -159,9 +159,21 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Zombies now look like dead ordinary people: eight outfits including Bjørn-type suits with ties, moustaches, cracked glasses, grey hair; noses, ears, brows, sunken eyes, teeth.
 - Fix: church pews faced the wrong way (backrests towards the altar).
 
-## Multiplayer with join codes (requested 2026-11-08, needs Kent's decision)
-- Browser players cannot connect to each other directly without a small online server that pairs them by code. Options: (A) code-based peer-to-peer (one player hosts in their browser; a tiny pairing server on the homelab matches codes), (B) dedicated game server on the homelab with room codes (the agreed long-term plan), (C) LAN only with the Windows version (no server, join by IP).
-- Every system needs network syncing (players, zombies, vehicles, doors, building, storm, time of day). Proposed staging: 1) see each other, move, shoot, zombies and vehicles synced; 2) building, crafting, storm, items.
+## Multiplayer with join codes (decided 2026-11-08, first version in v0.8)
+- Code-based relay: `server/relay.py` on the homelab (Proxmox LXC, Debian 13) pairs players by a 5-letter code and forwards their game traffic over WebSocket. No TURN server, no UDP ports. Public address wss://pixelescape.notnow.no via Cloudflare (proxied) and Nginx Proxy Manager to the container on port 8090.
+- The host player's game is the authority. Everyone builds the same island from the host's seed.
+- Staging: v0.8 lobby, party and seeing each other (walk, drive, fly, name tags, late joining). Next: shooting and damage between players, zombies run by the host, vehicles, doors, building, harvesting, storm and time of day.
+- Party size: up to 8 (relay limit).
+
+## Lobby and characters (v0.8)
+- The start menu is replaced by a lobby inspired by browser shooters like 2v2.io: character on a pedestal, builder panel left, nickname, mode card, party and PLAY right, party members on side pedestals.
+- Character builder with presets. Default playable skin: the son's own look (navy hoodie, grey joggers, swept dark-blond hair, barefoot), built from reference photos. The photos are not stored in the repo or on the website (both public).
+- The previous designs are kept as presets for other characters: "Suit" (the original player driver look) and the eight zombie outfits as living people (game/character.gd PRESETS).
+- The game is renamed PixelEscape (domain pixelescape.notnow.no). The GitHub repo and Pages address keep the SudoFPS name for now.
+
+## Hangar (v0.7.1 to v0.7.2)
+- Helicopter hangar on the outskirts with a two-part sliding roof on rails, opened by a red button inside by the door. Built in code (moving parts), not Blender.
+- Bjørn hands out the helicopter too; it is delivered to the hangar. Developer mode also places it there.
 
 ## v0.6
 - Doors: the church tower has a wooden double door, every house a front door. E opens and closes them. Closed doors block zombies too, so a house is a place to hide (zombies spawned inside stay inside until someone opens up).
@@ -177,7 +189,7 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 
 ## Character
 - Suit outfit added to the character template (Top_04_Suit with shirt and tie, Bottom_04_SuitTrousers, Shoes_03_Dress). First-person arms wear the suit sleeves; a seated suited driver shows in third person while driving.
-- No real people's likenesses for characters.
+- No public figures' likenesses for characters. Family members' own looks are fine as stylised characters when they ask for it; reference photos stay out of the repo.
 
 ## Pending
 - Kent's review of this document.

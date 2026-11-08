@@ -30,6 +30,9 @@ Shape key `female` on Body, Tops and Bottoms: narrower chest and waist, wider hi
 
 Sockets: `SOCKET_Weapon_R` (gun hand), `SOCKET_Offhand_L`, `SOCKET_Hat`, `SOCKET_Back` (slung long gun), `SOCKET_Hip_R` (holster), `SOCKET_Camera` (eye height for first person).
 
+## In-game characters (v0.8)
+The lobby builder and all players in game use `game/character.gd`: block characters built in code from a look dictionary (skin, hair, hair_col, top, top_col, tie, pants, pants_col, feet, glasses, beard, height). Faces -Z, feet at y = 0, 1.84 m at height 1.0. Joints: hips, torso, head, shoulders, hips/knees, so it can walk and sit. Presets live in `PRESETS`; add a new one there to make it selectable. The Blender person template above stays the reference for a future modelled character.
+
 ## Environment
 
 - **Tree** ~5.6 m. Collider on the trunk only. `HARVEST_Point` marks where hits and wood drops spawn.
