@@ -192,6 +192,8 @@ func ground_type(x: float, z: float) -> String:
 		return "sand"
 	if in_site(x, z, 2.5):
 		return "dirt"
+	if on_road(x, z, 0.5):
+		return "road"
 	var slope := Vector2(height_at(x + 1.0, z) - h, height_at(x, z + 1.0) - h).length()
 	if slope > 0.75 or _rock_n.get_noise_2d(x, z) > 0.5 or h > 17.0:
 		return "rock"
@@ -206,6 +208,7 @@ func _type_color(t: String, x: float, z: float) -> Color:
 		"sand": return Color(0.80, 0.73, 0.50).darkened(v * 0.05)
 		"rock": return Color(0.42, 0.41, 0.39).lerp(Color(0.33, 0.32, 0.31), v * 0.5 + 0.5)
 		"dirt": return Color(0.40, 0.29, 0.18).lerp(Color(0.33, 0.24, 0.15), v * 0.5 + 0.5)
+		"road": return Color(0.22, 0.21, 0.20)
 	return Color(0.24, 0.50, 0.15).lerp(Color(0.33, 0.58, 0.18), v * 0.5 + 0.5)
 
 func _ground_color(i: int, j: int) -> Color:
@@ -295,7 +298,7 @@ func _scatter() -> void:
 	var bush_shape := BoxShape3D.new()
 	bush_shape.size = Vector3(1.4, 1.0, 1.2)
 	var specs := [
-		["tree", 190, 5.0, 2.2, 18.0, tree_d],
+		["tree", 140, 5.0, 2.2, 18.0, tree_d],
 		["rock", 85, 6.0, 0.8, 26.0, rock_d],
 		["bush", 230, 3.0, 1.6, 16.0, bush_d],
 	]
@@ -312,7 +315,7 @@ func _scatter() -> void:
 				continue
 			if kind != "rock" and forest.get_noise_2d(x, z) < -0.15 and rng.randf() < 0.8:
 				continue
-			if in_site(x, z, 3.0):
+			if in_site(x, z, 3.0) or on_road(x, z, 2.5):
 				continue
 			if not _free(grid, x, z, spec[2]):
 				continue
@@ -344,29 +347,51 @@ func _scatter() -> void:
 			else:
 				bushes.append(entry)
 			placed += 1
+	_pines(grid, rng)
 
-# ---------------------------------------------------------------- town
+# ---------------------------------------------------------------- structure spawner
+## Data-driven: every island rolls a count between min and max for each structure type.
+## "central" structures cluster round the town centre; parking lots go in front of the entrance.
+const STRUCTURES := [
+	{"kind": "supermarket", "min": 1, "max": 1, "ring": Vector2(0, 0)},
+	{"kind": "church", "min": 1, "max": 1, "ring": Vector2(28, 60)},
+	{"kind": "dealership", "min": 1, "max": 1, "ring": Vector2(45, 110)},
+	{"kind": "house", "min": 5, "max": 9, "ring": Vector2(25, 105)},
+]
 const BUILDINGS := {
-	"supermarket": {"glb": "res://assets/glb/bld_supermarket.glb", "half": Vector2(12.6, 10.2), "off": Vector2(0, 0.6)},
-	"church": {"glb": "res://assets/glb/bld_church.glb", "half": Vector2(5.6, 12.0), "off": Vector2(0, 1.4)},
-	"house": {"glb": "res://assets/glb/bld_house.glb", "half": Vector2(4.6, 4.7), "off": Vector2(0, 0.3)},
+	"supermarket": {"glb": "res://assets/glb/bld_supermarket.glb", "half": Vector2(12.4, 8.8), "off": Vector2(0, 0.5), "front": 9.3, "park": Vector2(22, 12)},
+	"church": {"glb": "res://assets/glb/bld_church.glb", "half": Vector2(5.8, 11.6), "off": Vector2(0, 1.2), "front": 12.8, "park": Vector2(14, 10)},
+	"dealership": {"glb": "res://assets/glb/bld_dealership.glb", "half": Vector2(11.4, 7.4), "off": Vector2(0, 0), "front": 7.5, "park": Vector2(22, 12)},
+	"house": {"glb": "res://assets/glb/bld_house.glb", "half": Vector2(4.6, 4.5), "off": Vector2(0, 0.3), "front": 4.5, "park": Vector2.ZERO},
 }
 const HOUSE_COLOURS := [Color(0.85, 0.78, 0.62), Color(0.70, 0.22, 0.15), Color(0.95, 0.93, 0.88), Color(0.55, 0.65, 0.72),
 	Color(0.80, 0.68, 0.35), Color(0.45, 0.55, 0.40), Color(0.35, 0.30, 0.28)]
 const ROOF_COLOURS := [Color(0.35, 0.10, 0.07), Color(0.18, 0.18, 0.20), Color(0.30, 0.22, 0.15), Color(0.20, 0.28, 0.35)]
+const ROAD_W := 6.0
 
-func _site_rect(kind: String, pos: Vector2, rot: int) -> Rect2:
-	var b: Dictionary = BUILDINGS[kind]
-	var half: Vector2 = b.half
-	var off: Vector2 = b.off
+var roads: Array = []          # {pts: PackedVector2Array, w: float}
+var _road_grid := {}           # Vector2i(8 m cell) -> Array of [a, b, half width]
+
+func _rot_rect(pos: Vector2, rot: int, off: Vector2, half: Vector2) -> Rect2:
 	if rot % 2 == 1:
 		half = Vector2(half.y, half.x)
-	var o := off.rotated(-rot * PI / 2.0)
-	return Rect2(pos + o - half, half * 2.0)
+	return Rect2(pos + off.rotated(-rot * PI / 2.0) - half, half * 2.0)
+
+func _local_to_world(st: Dictionary, local: Vector2) -> Vector2:
+	var l := local.rotated(-st.rot * PI / 2.0)
+	return Vector2(st.pos.x, st.pos.z) + l
 
 func in_site(x: float, z: float, margin := 0.0) -> bool:
 	for st in sites:
-		if (st.rect as Rect2).grow(margin).has_point(Vector2(x, z)):
+		for r in st.rects:
+			if (r as Rect2).grow(margin).has_point(Vector2(x, z)):
+				return true
+	return false
+
+func on_road(x: float, z: float, margin := 0.0) -> bool:
+	var p := Vector2(x, z)
+	for seg in _road_grid.get(Vector2i(floori(x / 8.0), floori(z / 8.0)), []):
+		if Geometry2D.get_closest_point_to_segment(p, seg[0], seg[1]).distance_to(p) < seg[2] + margin:
 			return true
 	return false
 
@@ -375,29 +400,11 @@ func _raw_h(x: float, z: float) -> float:
 	var j := clampi(roundi((z + SIZE / 2.0) / RES), 0, N - 1)
 	return heights[j * N + i]
 
-func _try_site(kind: String, pos: Vector2, rot: int) -> bool:
-	var r := _site_rect(kind, pos, rot)
-	var lo := 999.0
-	var hi := -999.0
-	var x := r.position.x
-	while x <= r.end.x:
-		var z := r.position.y
-		while z <= r.end.y:
-			var h := _raw_h(x, z)
-			lo = minf(lo, h)
-			hi = maxf(hi, h)
-			z += 2.0
-		x += 2.0
-	if lo < 2.2 or hi > 18.0 or hi - lo > 4.0:
-		return false
-	for st in sites:
-		if (st.rect as Rect2).grow(6.0).intersects(r):
-			return false
-	var target := (lo + hi) / 2.0
-	sites.append({"kind": kind, "pos": Vector3(pos.x, target, pos.y), "rot": rot, "rect": r})
-	# flatten the footprint, blend back to the hills over 6 m
+func _flatten_rect(r: Rect2, target: float) -> void:
 	for j in N:
 		var zz := -SIZE / 2.0 + j * RES
+		if zz < r.position.y - 8.0 or zz > r.end.y + 8.0:
+			continue
 		for i in N:
 			var xx := -SIZE / 2.0 + i * RES
 			var dx := maxf(maxf(r.position.x - 1.5 - xx, xx - r.end.x - 1.5), 0.0)
@@ -406,38 +413,213 @@ func _try_site(kind: String, pos: Vector2, rot: int) -> bool:
 			if d < 6.0:
 				var k := j * N + i
 				heights[k] = lerpf(target, heights[k], smoothstep(0.0, 6.0, d))
+
+func _try_site(kind: String, pos: Vector2, rot: int) -> bool:
+	var b: Dictionary = BUILDINGS[kind]
+	var rects: Array = [_rot_rect(pos, rot, b.off, b.half)]
+	var park: Vector2 = b.park
+	var reach: float = b.front
+	if park != Vector2.ZERO:
+		rects.append(_rot_rect(pos, rot, Vector2(0, b.front + 0.5 + park.y / 2.0), park / 2.0))
+		reach += 0.5 + park.y
+	var lo := 999.0
+	var hi := -999.0
+	for r in rects:
+		var x: float = r.position.x
+		while x <= r.end.x:
+			var z: float = r.position.y
+			while z <= r.end.y:
+				var h := _raw_h(x, z)
+				lo = minf(lo, h)
+				hi = maxf(hi, h)
+				z += 2.0
+			x += 2.0
+	if lo < 2.2 or hi > 18.0 or hi - lo > 4.5:
+		return false
+	for st in sites:
+		for r1 in st.rects:
+			for r2 in rects:
+				if (r1 as Rect2).grow(5.0).intersects(r2):
+					return false
+	var target := (lo + hi) / 2.0
+	var st := {"kind": kind, "pos": Vector3(pos.x, target, pos.y), "rot": rot, "rects": rects,
+		"rect": rects[0], "park": rects[1] if rects.size() > 1 else null}
+	st["door"] = _local_to_world(st, Vector2(0, b.front + 0.3))
+	st["connect"] = _local_to_world(st, Vector2(0, reach + 4.0))
+	sites.append(st)
+	for r in rects:
+		_flatten_rect(r, target)
 	return true
 
-## Supermarket and church near the middle, seven houses around them.
 func _plan_town() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value + 501
-	var centre := Vector2.ZERO
-	for kind in ["supermarket", "church"]:
-		for t in 600:
-			var p := Vector2(rng.randf_range(-70, 70), rng.randf_range(-70, 70))
-			if _try_site(kind, p, rng.randi() % 4):
-				if kind == "supermarket":
+	var plan: Array = []
+	for e in STRUCTURES:
+		for i in rng.randi_range(e.min, e.max):
+			plan.append(e)
+	var centre := Vector2.INF
+	for e in plan:
+		for t in 900:
+			var p: Vector2
+			if centre == Vector2.INF:
+				p = Vector2(rng.randf_range(-70, 70), rng.randf_range(-70, 70))
+			else:
+				var ring: Vector2 = e.ring
+				var a := rng.randf() * TAU
+				p = centre + Vector2(cos(a), sin(a)) * rng.randf_range(ring.x, ring.y + t * 0.05)
+			# face the entrance towards the town centre
+			var rot := rng.randi() % 4
+			if centre != Vector2.INF:
+				var to := centre - p
+				var best := -2.0
+				for r in 4:
+					var f := Vector2(sin(r * PI / 2.0), cos(r * PI / 2.0))
+					var dd := f.dot(to.normalized())
+					if dd > best:
+						best = dd
+						rot = r
+			if _try_site(e.kind, p, rot):
+				if centre == Vector2.INF:
 					centre = p
 				break
-	var houses := 0
-	for t in 3000:
-		if houses >= 7:
+	_plan_roads()
+
+## Roads: a minimum spanning tree between the entrances, each link routed round water, steep
+## ground and other buildings, then the ground is smoothed under it.
+func _plan_roads() -> void:
+	var n := sites.size()
+	if n < 2:
+		return
+	var pts: Array = []
+	for st in sites:
+		pts.append(st.connect)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value + 611
+	var linked := [0]
+	var bad := {}
+	while linked.size() < n:
+		var best := INF
+		var bi := -1
+		var bj := -1
+		for i in linked:
+			for j in n:
+				if j in linked or bad.has(Vector2i(i, j)):
+					continue
+				var d: float = pts[i].distance_to(pts[j])
+				if d < best:
+					best = d
+					bi = i
+					bj = j
+		if bj < 0:
 			break
-		var a := rng.randf() * TAU
-		var r := rng.randf_range(25.0, 95.0)
-		var p := centre + Vector2(cos(a), sin(a)) * r
-		if _try_site("house", p, rng.randi() % 4):
-			houses += 1
+		var path := _route(pts[bi], pts[bj], rng)
+		if path.is_empty():
+			bad[Vector2i(bi, bj)] = true
+			continue
+		roads.append({"pts": path, "w": ROAD_W})
+		linked.append(bj)
+	# driveways from each link point to the entrance
+	for st in sites:
+		var w := 4.0 if st.kind == "house" else ROAD_W
+		roads.append({"pts": PackedVector2Array([st.connect, st.door]), "w": w})
+	for rd in roads:
+		_index_road(rd)
+		_flatten_road(rd)
+
+func _route(a: Vector2, b: Vector2, rng: RandomNumberGenerator) -> PackedVector2Array:
+	for attempt in 12:
+		var side := (b - a).orthogonal().normalized()
+		var j1 := 0.0 if attempt == 0 else rng.randf_range(-1.0, 1.0) * a.distance_to(b) * 0.35
+		var j2 := 0.0 if attempt == 0 else rng.randf_range(-1.0, 1.0) * a.distance_to(b) * 0.35
+		var ctrl := [a, a.lerp(b, 0.33) + side * j1, a.lerp(b, 0.66) + side * j2, b]
+		var path := PackedVector2Array()
+		var steps := maxi(4, int(a.distance_to(b) / 2.0))
+		for k in steps + 1:
+			path.append(_bezier(ctrl, float(k) / steps))
+		var ok := true
+		var prev_h := _raw_h(a.x, a.y)
+		for k in path.size():
+			var p := path[k]
+			var h := _raw_h(p.x, p.y)
+			if h < 1.4 or absf(h - prev_h) > 0.7:
+				ok = false
+				break
+			prev_h = h
+			if k > 2 and k < path.size() - 3 and in_site(p.x, p.y, 2.0):
+				ok = false
+				break
+		if ok:
+			return path
+	return PackedVector2Array()
+
+func _bezier(c: Array, t: float) -> Vector2:
+	var u := 1.0 - t
+	return c[0] * u * u * u + c[1] * 3.0 * u * u * t + c[2] * 3.0 * u * t * t + c[3] * t * t * t
+
+func _index_road(rd: Dictionary) -> void:
+	var p: PackedVector2Array = rd.pts
+	for k in p.size() - 1:
+		var a := p[k]
+		var b := p[k + 1]
+		var hw: float = rd.w / 2.0
+		for cx in range(floori((minf(a.x, b.x) - hw - 3) / 8.0), floori((maxf(a.x, b.x) + hw + 3) / 8.0) + 1):
+			for cz in range(floori((minf(a.y, b.y) - hw - 3) / 8.0), floori((maxf(a.y, b.y) + hw + 3) / 8.0) + 1):
+				var key := Vector2i(cx, cz)
+				if not _road_grid.has(key):
+					_road_grid[key] = []
+				_road_grid[key].append([a, b, hw])
+
+func _flatten_road(rd: Dictionary) -> void:
+	var p: PackedVector2Array = rd.pts
+	var hs := PackedFloat32Array()
+	for q in p:
+		hs.append(_raw_h(q.x, q.y))
+	var smooth := PackedFloat32Array()
+	for k in p.size():
+		var sum := 0.0
+		var cnt := 0
+		for o in range(-3, 4):
+			var kk := clampi(k + o, 0, p.size() - 1)
+			sum += hs[kk]
+			cnt += 1
+		smooth.append(sum / cnt)
+	var hw: float = rd.w / 2.0
+	for k in p.size() - 1:
+		var a := p[k]
+		var b := p[k + 1]
+		var i0 := clampi(floori((minf(a.x, b.x) - hw - 3 + SIZE / 2.0) / RES), 0, N - 1)
+		var i1 := clampi(ceili((maxf(a.x, b.x) + hw + 3 + SIZE / 2.0) / RES), 0, N - 1)
+		var j0 := clampi(floori((minf(a.y, b.y) - hw - 3 + SIZE / 2.0) / RES), 0, N - 1)
+		var j1 := clampi(ceili((maxf(a.y, b.y) + hw + 3 + SIZE / 2.0) / RES), 0, N - 1)
+		for j in range(j0, j1 + 1):
+			for i in range(i0, i1 + 1):
+				var q := Vector2(-SIZE / 2.0 + i * RES, -SIZE / 2.0 + j * RES)
+				if in_site(q.x, q.y):
+					continue
+				var c := Geometry2D.get_closest_point_to_segment(q, a, b)
+				var d := c.distance_to(q)
+				if d > hw + 3.0:
+					continue
+				var t := clampf(a.distance_to(c) / maxf(a.distance_to(b), 0.01), 0.0, 1.0)
+				var target := lerpf(smooth[k], smooth[k + 1], t)
+				var kk := j * N + i
+				heights[kk] = lerpf(target, heights[kk], smoothstep(hw - 0.5, hw + 3.0, d))
 
 func _town() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value + 777
+	var asphalt := StandardMaterial3D.new()
+	asphalt.albedo_color = Color(0.16, 0.16, 0.17)
+	asphalt.roughness = 0.95
+	var paint := StandardMaterial3D.new()
+	paint.albedo_color = Color(0.85, 0.85, 0.80)
+	paint.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	for st in sites:
 		var b: Dictionary = BUILDINGS[st.kind]
 		var d := Game.asset(b.glb)
 		var xf := Transform3D(Basis(Vector3.UP, st.rot * PI / 2.0), st.pos)
-		var root := Game.place_static(d, xf, self, Game.L_WORLD, 260.0)
+		var root := Game.place_static(d, xf, self, Game.L_WORLD, 280.0)
 		st["node"] = root
 		if st.kind == "house":
 			var wall: Color = HOUSE_COLOURS[rng.randi() % HOUSE_COLOURS.size()]
@@ -453,6 +635,116 @@ func _town() -> void:
 							var c := (m as BaseMaterial3D).duplicate() as BaseMaterial3D
 							c.albedo_color = wall if nm == "Wall" else roof
 							mi.set_surface_override_material(si, c)
+		if st.park != null:
+			_parking(st, b, asphalt, paint, rng)
+	_road_meshes(asphalt, paint)
+
+func _parking(st: Dictionary, b: Dictionary, asphalt: Material, paint: Material, rng: RandomNumberGenerator) -> void:
+	var r: Rect2 = st.park
+	var y: float = st.pos.y
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(r.size.x, 0.04, r.size.y)
+	bm.material = asphalt
+	mi.mesh = bm
+	add_child(mi)
+	mi.global_position = Vector3(r.get_center().x, y + 0.02, r.get_center().y)
+	# bays along the far edge, leaving a lane in front of the entrance
+	var park: Vector2 = b.park
+	var basis := Basis(Vector3.UP, st.rot * PI / 2.0)
+	var far: float = b.front + 0.5 + park.y
+	var bays := int(park.x / 2.6)
+	for i in bays + 1:
+		var lx := -park.x / 2.0 + 0.4 + i * (park.x - 0.8) / bays
+		var line := MeshInstance3D.new()
+		var lm := BoxMesh.new()
+		lm.size = Vector3(0.12, 0.01, 4.8)
+		lm.material = paint
+		line.mesh = lm
+		add_child(line)
+		line.global_transform = Transform3D(basis, st.pos + basis * Vector3(lx, 0.05, far - 2.6))
+	# a few abandoned cars
+	var rust := StandardMaterial3D.new()
+	rust.albedo_color = [Color(0.40, 0.18, 0.08), Color(0.25, 0.30, 0.35), Color(0.45, 0.42, 0.30)][rng.randi() % 3]
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.08, 0.1, 0.12)
+	for k in rng.randi_range(0, 3):
+		var lx := -park.x / 2.0 + 0.4 + (rng.randi() % bays + 0.5) * (park.x - 0.8) / bays
+		var car := StaticBody3D.new()
+		car.collision_layer = Game.L_WORLD
+		add_child(car)
+		car.global_transform = Transform3D(basis.rotated(Vector3.UP, rng.randf_range(-0.15, 0.15)), st.pos + basis * Vector3(lx, 0.0, far - 2.5))
+		for prt in [[Vector3(1.8, 0.8, 4.2), Vector3(0, 0.55, 0), rust], [Vector3(1.6, 0.6, 2.0), Vector3(0, 1.25, -0.2), glass]]:
+			var m2 := MeshInstance3D.new()
+			var bm2 := BoxMesh.new()
+			bm2.size = prt[0]
+			bm2.material = prt[2]
+			m2.mesh = bm2
+			m2.position = prt[1]
+			car.add_child(m2)
+		var cs := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3(1.8, 1.5, 4.2)
+		cs.shape = bs
+		cs.position.y = 0.75
+		car.add_child(cs)
+
+func _road_meshes(asphalt: Material, paint: Material) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var dash := SurfaceTool.new()
+	dash.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for rd in roads:
+		var p: PackedVector2Array = rd.pts
+		var hw: float = rd.w / 2.0
+		# resample every 1.5 m
+		var pts := PackedVector2Array()
+		for k in p.size() - 1:
+			var seg := p[k].distance_to(p[k + 1])
+			var steps := maxi(1, int(seg / 1.5))
+			for s2 in steps:
+				pts.append(p[k].lerp(p[k + 1], float(s2) / steps))
+		pts.append(p[p.size() - 1])
+		var along := 0.0
+		for k in pts.size() - 1:
+			var a := pts[k]
+			var b := pts[k + 1]
+			var dir := (b - a).normalized()
+			var dir_a := (pts[mini(k + 1, pts.size() - 1)] - pts[maxi(k - 1, 0)]).normalized()
+			var dir_b := (pts[mini(k + 2, pts.size() - 1)] - pts[k]).normalized()
+			var sa := dir_a.orthogonal() * hw
+			var sb := dir_b.orthogonal() * hw
+			var v := [a - sa, a + sa, b - sb, b + sb]
+			var v3: Array = []
+			for q in v:
+				v3.append(Vector3(q.x, height_at(q.x, q.y) + 0.06, q.y))
+			for idx in [0, 2, 1, 1, 2, 3]:
+				st.set_normal(Vector3.UP)
+				st.add_vertex(v3[idx])
+			# dashed centre line on full-width roads
+			var seg_len := a.distance_to(b)
+			if hw >= 2.5 and fmod(along, 5.0) < 2.5:
+				var s3 := dir.orthogonal() * 0.08
+				var ya := height_at(a.x, a.y) + 0.075
+				var yb := height_at(b.x, b.y) + 0.075
+				var d4 := [Vector3(a.x - s3.x, ya, a.y - s3.y), Vector3(a.x + s3.x, ya, a.y + s3.y),
+					Vector3(b.x - s3.x, yb, b.y - s3.y), Vector3(b.x + s3.x, yb, b.y + s3.y)]
+				for idx in [0, 2, 1, 1, 2, 3]:
+					dash.set_normal(Vector3.UP)
+					dash.add_vertex(d4[idx])
+			along += seg_len
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = asphalt
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var dm := dash.commit()
+	if dm.get_surface_count() > 0:
+		var di := MeshInstance3D.new()
+		di.mesh = dm
+		di.material_override = paint
+		di.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(di)
 
 ## Interior spawn points (DayZ: zombies lurk inside buildings).
 func interior_points() -> Array:
@@ -463,10 +755,17 @@ func interior_points() -> Array:
 		match st.kind:
 			"supermarket": pts = [Vector3(-5, 0, 2), Vector3(4, 0, -1), Vector3(9, 0, 3), Vector3(-1, 0, -5)]
 			"church": pts = [Vector3(0, 0, -2), Vector3(1.5, 0, -6)]
+			"dealership": pts = [Vector3(0, 0, -3), Vector3(-7, 0, -4)]
 			"house": pts = [Vector3(-1.5, 0, 1.5)] if randf() < 0.6 else []
 		for p in pts:
 			out.append(st.pos + b * p + Vector3(0, 0.3, 0))
 	return out
+
+func site_of(kind: String):
+	for st in sites:
+		if st.kind == kind:
+			return st
+	return null
 
 # ---------------------------------------------------------------- ramps
 func _ramps() -> void:
@@ -481,7 +780,7 @@ func _ramps() -> void:
 		var x := rng.randf_range(-130, 130)
 		var z := rng.randf_range(-130, 130)
 		var h := height_at(x, z)
-		if h < 2.0 or h > 14.0 or in_site(x, z, 8.0):
+		if h < 2.0 or h > 14.0 or in_site(x, z, 8.0) or on_road(x, z, 6.0):
 			continue
 		var yaw := rng.randf() * TAU
 		var dir := Vector3(sin(yaw), 0, cos(yaw))
@@ -515,6 +814,45 @@ func _ramps() -> void:
 		body.global_transform = Transform3D(Basis(Vector3.UP, yaw), Vector3(x, minf(h, h2), z))
 		ramps.append(body)
 		made += 1
+
+## Clusters of pines: a dozen small forests per island.
+func _pines(grid: Dictionary, rng: RandomNumberGenerator) -> void:
+	var pine_d := Game.asset("res://assets/glb/pine.glb")
+	for c in rng.randi_range(10, 14):
+		var centre := Vector2.INF
+		for t in 200:
+			var x := rng.randf_range(-SIZE * 0.42, SIZE * 0.42)
+			var z := rng.randf_range(-SIZE * 0.42, SIZE * 0.42)
+			var h := height_at(x, z)
+			if h > 3.0 and h < 17.0 and not in_site(x, z, 10.0) and not on_road(x, z, 6.0):
+				centre = Vector2(x, z)
+				break
+		if centre == Vector2.INF:
+			continue
+		var want := rng.randi_range(10, 22)
+		var placed := 0
+		for t in want * 4:
+			if placed >= want:
+				break
+			var a := rng.randf() * TAU
+			var r := sqrt(rng.randf()) * 17.0
+			var x := centre.x + cos(a) * r
+			var z := centre.y + sin(a) * r
+			var h := height_at(x, z)
+			if h < 2.0 or h > 19.0 or in_site(x, z, 3.0) or on_road(x, z, 2.5) or not _free(grid, x, z, 3.2):
+				continue
+			var key := Vector2i(int(x / 6.0), int(z / 6.0))
+			grid[key] = grid.get(key, []) + [Vector2(x, z)]
+			var s2 := rng.randf_range(0.8, 1.35)
+			var xf := Transform3D(Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3(s2, s2, s2)), Vector3(x, h - 0.05, z))
+			var root := Game.place_static(pine_d, xf, self, Game.L_WORLD, 240.0)
+			root.set_meta("res", "wood")
+			root.set_meta("hp", 5)
+			for ch in root.get_children():
+				if ch is StaticBody3D:
+					ch.set_meta("owner_root", root)
+			trees.append([root, Vector3(x, h, z)])
+			placed += 1
 
 func _free(grid: Dictionary, x: float, z: float, r: float) -> bool:
 	var cx := int(x / 6.0)
@@ -856,12 +1194,30 @@ func _map_image() -> void:
 				var shade := height_at(wx + 2.0, wz + 2.0) - h
 				c = c.darkened(clampf(shade * 0.08, -0.15, 0.25))
 			img.set_pixel(x, y, c)
+	for rd in roads:
+		var rp: PackedVector2Array = rd.pts
+		for k in rp.size() - 1:
+			for t in 6:
+				var q := rp[k].lerp(rp[k + 1], t / 6.0)
+				var mx := int((q.x + SIZE / 2.0) / SIZE * px)
+				var my := int((q.y + SIZE / 2.0) / SIZE * px)
+				for oy in range(-1, 1):
+					for ox in range(-1, 1):
+						if mx + ox >= 0 and my + oy >= 0 and mx + ox < px and my + oy < px:
+							img.set_pixel(mx + ox, my + oy, Color(0.30, 0.29, 0.28))
+	for st in sites:
+		if st.park != null:
+			var pr: Rect2 = st.park
+			for yy in range(int((pr.position.y + SIZE / 2.0) / SIZE * px), int((pr.end.y + SIZE / 2.0) / SIZE * px) + 1):
+				for xx in range(int((pr.position.x + SIZE / 2.0) / SIZE * px), int((pr.end.x + SIZE / 2.0) / SIZE * px) + 1):
+					if xx >= 0 and yy >= 0 and xx < px and yy < px:
+						img.set_pixel(xx, yy, Color(0.34, 0.33, 0.32))
 	for st in sites:
 		var r: Rect2 = st.rect
 		for yy in range(int((r.position.y + SIZE / 2.0) / SIZE * px), int((r.end.y + SIZE / 2.0) / SIZE * px) + 1):
 			for xx in range(int((r.position.x + SIZE / 2.0) / SIZE * px), int((r.end.x + SIZE / 2.0) / SIZE * px) + 1):
 				if xx >= 0 and yy >= 0 and xx < px and yy < px:
-					img.set_pixel(xx, yy, Color(0.22, 0.2, 0.2) if st.kind != "church" else Color(0.45, 0.2, 0.18))
+					img.set_pixel(xx, yy, {"church": Color(0.45, 0.2, 0.18), "dealership": Color(0.2, 0.3, 0.55)}.get(st.kind, Color(0.22, 0.2, 0.2)))
 	map_texture = ImageTexture.create_from_image(img)
 
 # ---------------------------------------------------------------- grass and pebbles
@@ -937,16 +1293,28 @@ func _grass_mesh() -> ArrayMesh:
 	return mesh
 
 # ---------------------------------------------------------------- props
+## The Tike and Bike wait inside the abandoned dealership, facing out of the big opening.
 func _vehicles(spawn: Vector3) -> void:
-	var specs := [["res://assets/glb/vehicle_tike.glb", "tike", Vector3(5, 0, -4), 2.4],
-				  ["res://assets/glb/vehicle_bike.glb", "bike", Vector3(8, 0, -1), 1.2]]
+	var dealer = site_of("dealership")
+	var marks: Dictionary = Game.asset(BUILDINGS.dealership.glb).markers if dealer else {}
+	var specs := [["res://assets/glb/vehicle_tike.glb", "tike", "SPAWN_TIKE", Vector3(5, 0, -4)],
+				  ["res://assets/glb/vehicle_bike.glb", "bike", "SPAWN_BIKE", Vector3(8, 0, -1)]]
 	for sp in specs:
-		var p: Vector3 = spawn + sp[2]
-		p.y = height_at(p.x, p.z) + 0.2
+		var p: Vector3 = spawn + sp[3]
+		var yaw := 2.4
+		if dealer and marks.has(sp[2]):
+			var b := Basis(Vector3.UP, dealer.rot * PI / 2.0)
+			p = dealer.pos + b * (marks[sp[2]] as Transform3D).origin
+			yaw = dealer.rot * PI / 2.0
+			p.y = dealer.pos.y + 0.15
+		else:
+			p.y = height_at(p.x, p.z) + 0.2
 		var v := CharacterBody3D.new()
 		v.set_script(load("res://game/vehicle.gd"))
 		add_child(v)
 		v.setup(sp[0], sp[1])
 		v.global_position = p
-		v.rotation.y = sp[3]
+		v.rotation.y = yaw
 		vehicles.append(v)
+	if dealer:
+		Game.msg("The Tike and the Bike are in the old car dealership at %s" % Game.sector(dealer.pos), Color(1, 0.9, 0.6))

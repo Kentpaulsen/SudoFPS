@@ -1,5 +1,13 @@
 # Change log
 
+## Prototype v0.4.0 (2026-11-08)
+- Structure spawner: every island rolls its own town (supermarket, church, car dealership, 5-9 houses), entrances facing the town centre.
+- Abandoned car dealership: the Tike and Bike now start inside it, with a 7 m opening to drive out through. Broken glass, a hanging sign, part of the roof caved in.
+- Parking lots with painted bays and wrecked cars outside the supermarket, church and dealership.
+- Roads connect every building, with driveways to each house. They follow the hills, avoid water and show on the map.
+- Pine forests in clusters around the island.
+- Fix: building floors are now level with the ground, so you can walk and drive straight in.
+
 ## Prototype v0.3.0 (2026-11-08)
 - Town: a supermarket (shelves, checkouts, storage room), a church (bell tower, pews, altar) and seven houses (two rooms, furniture) on every island. All enterable, with open windows. Zombies wait inside some of them.
 - Vehicle physics: velocity follows the slope, so hills and the eight dirt ramps launch you. Air time is announced, landings squash the suspension.

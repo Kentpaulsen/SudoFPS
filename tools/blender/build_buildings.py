@@ -83,10 +83,10 @@ def bmats(extra=()):
     return base + [mat(*e) for e in extra]
 WALL, ROOF, TRIM, FLOOR, FOUND, FURN, FAB, DARK = range(8)
 
-def base_slab(k, w, d, h=0.18):
-    k.box((w + 0.3, d + 0.3, 2.2), (0, 0, -1.1 + h - 0.02), FOUND)          # foundation into the ground
-    k.box((w - 0.1, d - 0.1, 0.04), (0, 0, h + 0.0), FLOOR, col=False)      # floor finish
-    return h
+def base_slab(k, w, d):
+    k.box((w + 0.3, d + 0.3, 2.2), (0, 0, -1.1), FOUND)                      # foundation, top flush with the ground
+    k.box((w - 0.1, d - 0.1, 0.02), (0, 0, 0.012), FLOOR, col=False)         # floor finish (walk/drive straight in)
+    return 0.0
 
 # ---------------------------------------------------------------- house
 def house():
@@ -114,7 +114,7 @@ def house():
         k.roof_hull([(x - t / 2, -D / 2, z0 + H), (x + t / 2, -D / 2, z0 + H), (x - t / 2, D / 2, z0 + H),
                      (x + t / 2, D / 2, z0 + H), (x - t / 2, 0, z0 + H + rh - 0.1), (x + t / 2, 0, z0 + H + rh - 0.1)], WALL, col=False)
     k.box((0.6, 0.6, 1.6), (2.2, 1.6, z0 + H + 1.5), FOUND)                 # chimney
-    k.box((1.6, 0.9, 0.06), (0, -D / 2 - 0.6, z0 - 0.06), FOUND)            # doorstep
+    k.box((1.6, 0.9, 0.02), (0, -D / 2 - 0.6, 0.012), FOUND, col=False)     # doorstep
     # furniture
     k.box((1.6, 0.9, 0.06), (-1.8, -1.6, z0 + 0.75), FURN)
     for dx, dy in ((-0.9, 0.7), (0.9, 0.7), (-0.9, -0.7), (0.9, -0.7)):
@@ -160,7 +160,7 @@ def supermarket():
     k.box((10.0, 0.2, 1.2), (0, -D / 2 - 0.25, z0 + H - 0.3), SIGN)          # sign board
     for i in range(5):
         k.box((1.2, 0.05, 0.6), (-3.6 + i * 1.8, -D / 2 - 0.36, z0 + H - 0.3), TRIM, col=False)
-    k.box((W - 1, 2.0, 0.06), (0, -D / 2 - 1.2, z0 - 0.08), FOUND, col=False)  # forecourt
+    k.box((W - 1, 2.0, 0.02), (0, -D / 2 - 1.2, 0.012), FOUND, col=False)  # forecourt
     # shelves: 4 rows, 3 levels of goods
     goods = [G1, G2, G3]
     for r, x in enumerate((-7.5, -3.0, 1.5, 6.0)):
@@ -188,10 +188,10 @@ def church():
     STONE, GOLD = 8, 9
     c = coll("Church"); k = Kit(c)
     W, D, H, t = 10.0, 18.0, 6.0, 0.4
-    k.box((W + 0.4, D + 0.4, 2.2), (0, 1.0, -1.1 + 0.16), FOUND)
-    k.box((4.6, 4.6, 2.2), (0, -10.3, -1.1 + 0.16), FOUND)
-    z0 = 0.18
-    k.box((W - 0.2, D - 0.2, 0.04), (0, 1.0, z0), FLOOR, col=False)
+    k.box((W + 0.4, D + 0.4, 2.2), (0, 1.0, -1.1), FOUND)
+    k.box((4.6, 4.6, 2.2), (0, -10.3, -1.1), FOUND)
+    z0 = 0.0
+    k.box((W - 0.2, D - 0.2, 0.02), (0, 1.0, 0.012), FLOOR, col=False)
     yb, yf = 1.0 + D / 2 - t / 2, 1.0 - D / 2 + t / 2
     hx = W / 2 - t / 2
     win = [(2.5 + i * 4.0, 0.9, 1.6, 4.6) for i in range(4)]
@@ -235,6 +235,85 @@ def church():
                     "Enter through the tower door (-Y). Tall open windows, seven rows of pews, altar at the back.")
     empty("DOOR", (0, -13.0, 0), c, parent=root, size=0.3)
     save("bld_church")
+
+# ---------------------------------------------------------------- car dealership (abandoned)
+def dealership():
+    reset()
+    M = bmats([("Glass", (0.55, 0.75, 0.85), 0.05), ("Tile", (0.62, 0.62, 0.60), 0.6), ("Sign", (0.12, 0.25, 0.55), 0.6),
+               ("Rust", (0.40, 0.18, 0.08), 0.9), ("Rubber", (0.03, 0.03, 0.03), 0.95), ("Stain", (0.25, 0.23, 0.20), 0.95)])
+    GLASS, TILE, SIGN, RUST, RUB, STAIN = range(8, 14)
+    M[GLASS].blend_method = 'BLEND'
+    try:
+        M[GLASS].node_tree.nodes["Principled BSDF"].inputs["Alpha"].default_value = 0.3
+    except Exception:
+        pass
+    M[WALL].node_tree.nodes["Principled BSDF"].inputs["Base Color"].default_value = (0.60, 0.58, 0.52, 1)
+    c = coll("Dealership"); k = Kit(c)
+    W, D, H, t = 22.0, 14.0, 5.0, 0.3
+    z0 = base_slab(k, W, D)
+    k.box((W - 0.4, D - 0.4, 0.02), (0, 0, 0.014), TILE, col=False)
+    hx, hy = W / 2 - t / 2, D / 2 - t / 2
+    # front: 7 m wide vehicle opening in the middle, broken glass showroom windows either side
+    k.wall((-W / 2, -hy), (W / 2, -hy), t, H, WALL, [(11.0, 7.0, 0, 3.8), (3.7, 5.4, 0.6, 3.8), (18.3, 5.4, 0.6, 3.8)], z0, TRIM)
+    for cx, pieces in ((-7.3, [(-1.8, 1.0, 1.6), (0.6, 0.6, 1.0)]), (7.3, [(1.5, 1.6, 2.2)])):
+        for dx, w, h in pieces:   # the panes that are still in place
+            k.box((w, 0.03, h), (cx + dx, -hy, z0 + 0.6 + h / 2), GLASS)
+    for i in range(6):            # broken glass on the floor
+        k.box((0.3 + (i % 3) * 0.15, 0.25, 0.01), (-8 + i * 3.1, -hy + 0.6 + (i % 2) * 0.5, 0.025), GLASS, col=False)
+    k.wall((-W / 2, hy), (W / 2, hy), t, H, WALL, [(17.0, 4.0, 0, 3.6)], z0, TRIM)            # back workshop door
+    k.wall((-hx, -D / 2 + t), (-hx, D / 2 - t), t, H, WALL, [], z0)
+    k.wall((hx, -D / 2 + t), (hx, D / 2 - t), t, H, WALL, [(9.0, 1.0, 0, 2.1)], z0, TRIM)
+    # office in the back-left corner
+    k.wall((-W / 2 + t, 2.5), (-4.0, 2.5), 0.15, 3.0, WALL, [(5.0, 0.9, 0, 2.1)], z0)
+    k.wall((-4.0, 2.5), (-4.0, D / 2 - t), 0.15, 3.0, WALL, [], z0)
+    k.box((1.6, 0.8, 0.75), (-7.5, 4.6, 0.375), FURN)
+    k.box((0.5, 0.5, 0.5), (-7.5, 5.5, 0.25), FAB)
+    k.box((0.5, 0.4, 1.6), (-10.3, 4.0, 0.8), RUST)                                            # filing cabinet
+    # roof with a caved-in section over the right side
+    k.box((14.0, D + 0.4, 0.3), (-4.0, 0, H + 0.15), TRIM)
+    k.box((4.0, D + 0.4, 0.3), (9.0, 0, H + 0.15), TRIM)
+    for i in range(3):
+        k.box((1.8, 1.2, 0.2), (4.5 + i * 0.8, -1.5 + i * 2.0, 0.1 + i * 0.05), TRIM, rot=(8 * i, 12, 20 * i))  # roof debris
+    k.box((W - 0.4, 0.4, 0.4), (0, 0, H - 0.2), RUST, col=False)                               # roof beam
+    # faded sign, one side dropped
+    k.box((12.0, 0.25, 1.4), (0, -D / 2 - 0.3, H + 0.2), SIGN, rot=(0, 4, 0))
+    for i in range(4):
+        k.box((1.6, 0.05, 0.5), (-4.0 + i * 2.6, -D / 2 - 0.45, H + 0.2 - i * 0.18), TRIM, col=False)
+    # junk: tyre stacks, oil drums, stains, platforms where the cars stood
+    for (x, y, n) in ((9.0, 4.5, 4), (8.0, 5.6, 2), (-1.0, 5.6, 3)):
+        for j in range(n):
+            k.m.cyl(0.34, 0.24, (x, y, 0.12 + j * 0.25), RUB, seg=14)
+        k.cols.append(((0.7, 0.7, n * 0.25), (x, y, n * 0.125), (0, 0, 0)))
+    for (x, y) in ((10.0, -3.0), (10.0, -2.2), (2.5, 5.8)):
+        k.m.cyl(0.3, 0.9, (x, y, 0.45), RUST, seg=12)
+        k.cols.append(((0.6, 0.6, 0.9), (x, y, 0.45), (0, 0, 0)))
+    for (x, y, w, d) in ((-1.9, -1.5, 2.6, 3.4), (2.2, -1.5, 2.0, 3.0), (0.0, 3.5, 1.8, 1.5)):
+        k.box((w, d, 0.01), (x, y, 0.026), STAIN, col=False)
+    root = k.finish("Dealership", M, "ABANDONED CAR DEALERSHIP: 22 x 14 m, 5 m high. 7 m wide vehicle opening at the front (-Y),\n"
+                    "4 m workshop door at the back, office corner, part of the roof caved in, broken showroom glass.\n"
+                    "SPAWN_TIKE / SPAWN_BIKE: where the game parks the vehicles (facing out of the front opening).")
+    empty("DOOR", (0, -D / 2 - 1.0, 0), c, parent=root, size=0.3)
+    empty("SPAWN_TIKE", (-1.9, -1.5, 0), c, parent=root, size=0.4)
+    empty("SPAWN_BIKE", (2.2, -1.5, 0), c, parent=root, size=0.4)
+    save("bld_dealership")
+
+# ---------------------------------------------------------------- pine tree
+def pine():
+    reset()
+    bark = mat("Bark", (0.22, 0.13, 0.07), 0.9)
+    needles = mat("Needles", (0.06, 0.20, 0.08), 0.9)
+    needles2 = mat("NeedlesDark", (0.04, 0.14, 0.06), 0.9)
+    c = coll("Pine")
+    m = MB()
+    m.cyl(0.2, 7.0, (0, 0, 3.5), 0, seg=8, r2=0.1)
+    tiers = [(2.3, 2.6, 1.6), (1.9, 2.4, 3.1), (1.5, 2.2, 4.5), (1.05, 2.0, 5.8), (0.6, 1.6, 7.0)]
+    for i, (r, h, z) in enumerate(tiers):
+        m.cyl(r, h, (0, 0, z), 1 if i % 2 == 0 else 2, seg=9, r2=0.05)
+    root = m.finish("Pine", [bark, needles, needles2], c)
+    collider("Pine_COL_Trunk", (0.45, 0.45, 3.0), (0, 0, 1.5), c)
+    empty("HARVEST_Point", (0, -0.25, 1.1), c, parent=root, size=0.2)
+    set_meta("PINE: origin at ground, ~8 m tall. Trunk collider only. Harvested for wood like the other tree.")
+    save("pine")
 
 # ---------------------------------------------------------------- suit outfit on the character
 def suit():
@@ -285,6 +364,6 @@ def suit():
     bpy.ops.export_scene.gltf(filepath=os.path.join(GLB_DIR, "person.glb"), export_format='GLB', use_visible=False,
                               export_yup=True, export_skins=True, export_morph=True, export_animations=False)
 
-for fn in (house, supermarket, church, suit):
+for fn in (house, supermarket, church, dealership, pine):
     fn()
     print("built", fn.__name__)

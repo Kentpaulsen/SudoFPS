@@ -5,6 +5,7 @@ var t := 0.0
 var step := 0
 var shots := ""
 var max_air := 0.0
+var start_pos := Vector3.ZERO
 var shot_air := false
 
 func _ready() -> void:
@@ -79,13 +80,12 @@ func _process(dt: float) -> void:
 		pl.enter_vehicle(w.vehicles[0])
 		pl.third_person = true
 		Input.action_press("move_forward")
-		Input.action_press("move_left")
+		start_pos = w.vehicles[0].global_position
 	elif step == 7 and t > 15.5:
 		step = 8
 		_shot("05_driving")
 		Input.action_release("move_forward")
-		Input.action_release("move_left")
-		print("SMOKE drove speed=", w.vehicles[0].speed, " moved=", w.vehicles[0].global_position)
+		print("SMOKE drove speed=%.1f distance=%.1f" % [w.vehicles[0].speed, w.vehicles[0].global_position.distance_to(start_pos)])
 		pl.exit_vehicle()
 		pl.equip(3)
 		pl.yaw += 0.6
@@ -141,10 +141,24 @@ func _process(dt: float) -> void:
 	elif step == 12 and t > 25.0:
 		step = 13
 		_shot("09_church_inside")
-	elif step == 13 and t > 25.5:
+		var c: Vector3 = w.sites[0].pos
+		pl.set_physics_process(false)
+		pl.global_position = c + Vector3(-60, 55, 60)
+		_look_at(c)
+	elif step == 13 and t > 25.8 and t < 26.0:
+		_shot("10_aerial")
+		var dl = w.site_of("dealership")
+		if dl:
+			var b := Basis(Vector3.UP, dl.rot * PI / 2.0)
+			pl.global_position = dl.pos + b * Vector3(-6, 0, 22) + Vector3(0, 0.2, 0)
+			_look_at(dl.pos + Vector3(0, 2, 0))
+	elif step == 13 and t > 27.0:
+		_shot("11_dealership")
+		step = 14
+	elif step == 14 and t > 27.5:
 		var d = w.director
 		print("SMOKE fps=", Engine.get_frames_per_second(), " zombies=", d.zombies.size() if d else 0,
 			" chasing=", d.active_count() if d else 0, " hp=", pl.hp, " pieces=", w.pieces.size(),
-			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " buildings=", w.sites.size(), " ramps=", w.ramps.size(), " storm=", w.storm != null)
+			" trees=", w.trees.size(), " grass_chunks=", w.grass_chunks.size(), " buildings=", w.sites.size(), " roads=", w.roads.size(), " ramps=", w.ramps.size(), " storm=", w.storm != null)
 		print("SMOKE ok")
 		get_tree().quit()

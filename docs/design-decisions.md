@@ -129,10 +129,14 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Quality settings (grass density, shadows, view distance) so low-end machines such as Chromebooks can hold 30 fps.
 - Recorded sounds: the game loads `assets/audio/<slot>_<nn>.wav` automatically and picks a random take; generated placeholders stay as fallback. Spec in `docs/audio.md`. New sound slots: zombie_attack, zombie_death, player_death, player_turn, player_land, tree_fall, footsteps by ground.
 
-## Town (v0.3)
-- Each island gets a supermarket, a church and seven houses, all enterable. The ground under them is flattened and shown as dirt yard; buildings show on the map.
-- Houses get random wall and roof colours. Zombies lurk inside the supermarket, church and some houses.
-- Templates: `bld_house`, `bld_supermarket`, `bld_church` (Blender 4.2), colliders per wall piece, open windows to shoot through.
+## Town and structure spawner (v0.4)
+- Data-driven spawner: each structure type rolls a count per island (supermarket 1, church 1, car dealership 1, houses 5-9) and a placement ring around the town centre. Entrances face the town centre. Add a type by adding a row to the table plus its Blender template.
+- Parking lots (asphalt, painted bays, a few wrecked cars) in front of the supermarket, church and dealership. Houses get a narrow driveway instead.
+- Roads: a minimum spanning tree links every entrance, routed round water, steep ground and other buildings; the ground is smoothed under the road. Asphalt with a dashed centre line. Roads and parking show on the map.
+- Abandoned car dealership: 7 m wide drive-out opening, broken showroom glass, caved-in roof section, office, workshop door. The Tike and Bike spawn inside, facing out.
+- Floors are flush with the flattened ground (v0.4 fix), so players and vehicles go straight in.
+- Pine forests: 10-14 clusters of 10-22 pines per island, harvestable for wood.
+- Zombies lurk inside the supermarket, church, dealership and some houses. Houses get random wall and roof colours.
 
 ## Developer mode (v0.3)
 - P opens the developer panel: zombies chase me on/off, god mode, free building, stats, zombie spawn/remove buttons.
