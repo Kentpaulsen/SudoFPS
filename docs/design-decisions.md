@@ -127,7 +127,6 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Standing still on the Bike: zombies can pull you off.
 - Zombie count limited by performance: the game measures frame rate and stops spawning (and removes far-away idle zombies) when it drops below 30 fps; it lets the population grow again when there is headroom.
 - Quality settings (grass density, shadows, view distance) so low-end machines such as Chromebooks can hold 30 fps.
-- Recorded sounds: the game loads `assets/audio/<slot>_<nn>.wav` automatically and picks a random take; generated placeholders stay as fallback. Spec in `docs/audio.md`. New sound slots: zombie_attack, zombie_death, player_death, player_turn, player_land, tree_fall, footsteps by ground.
 
 ## Town and structure spawner (v0.4)
 - Data-driven spawner: each structure type rolls a count per island (supermarket 1, church 1, car dealership 1, houses 5-9) and a placement ring around the town centre. Entrances face the town centre. Add a type by adding a row to the table plus its Blender template.
@@ -140,6 +139,10 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 
 ## Developer mode (v0.3)
 - P opens the developer panel: zombies chase me on/off, god mode, free building, stats, zombie spawn/remove buttons.
+
+## Recorded sounds (v0.4.1)
+- The game loads `assets/audio/<slot>_<nn>.wav/.ogg` automatically and picks a random take per play; generated sounds stay as fallback. Spec: `docs/audio.md`.
+- First recordings in: player_hurt (1), zombie_scream (9 takes cut from two files), reload (2 parts). Originals kept in `assets/audio/raw/`.
 
 ## Character
 - Suit outfit added to the character template (Top_04_Suit with shirt and tie, Bottom_04_SuitTrousers, Shoes_03_Dress). First-person arms wear the suit sleeves; a seated suited driver shows in third person while driving.

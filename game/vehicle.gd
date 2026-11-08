@@ -94,7 +94,7 @@ func setup(glb: String, k: String) -> void:
 
 func _audio(stream: String, vol: float) -> AudioStreamPlayer3D:
 	var a := AudioStreamPlayer3D.new()
-	a.stream = Sfx.streams[stream]
+	a.stream = Sfx.get_stream(stream)
 	a.unit_size = 6.0
 	a.max_distance = 90.0
 	a.volume_db = vol

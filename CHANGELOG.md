@@ -1,5 +1,9 @@
 # Change log
 
+## Prototype v0.4.1 (2026-11-08)
+- Your own recordings are in: the damage scream when you get hurt, 9 zombie screams (cut from your two files, picked at random), and 2 reload sounds.
+- The game now loads any recording put in assets/audio with the right slot name, and falls back to the generated sounds for the rest.
+
 ## Prototype v0.4.0 (2026-11-08)
 - Structure spawner: every island rolls its own town (supermarket, church, car dealership, 5-9 houses), entrances facing the town centre.
 - Abandoned car dealership: the Tike and Bike now start inside it, with a 7 m opening to drive out through. Broken glass, a hanging sign, part of the roof caved in.

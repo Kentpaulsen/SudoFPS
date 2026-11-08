@@ -429,7 +429,7 @@ func start_reload() -> void:
 	if w.mode == "melee" or reloading > 0.0 or ammo[cur] >= w.mag:
 		return
 	reloading = w.reload
-	Sfx.play("click", -4, 1.2)
+	Sfx.play("reload", -3.0)
 	if mag_node:
 		var rest := mag_node.position
 		var tw := create_tween()
@@ -758,7 +758,7 @@ func die() -> void:
 	_clear_ghost()
 	craft_open = false
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	Sfx.play("hurt", 4.0, 0.6)
+	Sfx.play("death", 2.0, 0.85)
 
 func respawn() -> void:
 	var near := Vector3.ZERO

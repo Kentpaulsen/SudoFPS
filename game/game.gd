@@ -4,7 +4,7 @@ extends Node
 signal noise(pos: Vector3, radius: float)
 signal message(text: String, color: Color)
 
-const VERSION := "0.4.0"
+const VERSION := "0.4.1"
 const L_WORLD := 1
 const L_STRUCT := 2
 const L_PLAYER := 4

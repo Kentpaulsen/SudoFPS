@@ -3,6 +3,18 @@ extends Node
 ## Swap any entry in `streams` for a real .wav/.ogg later; play calls stay the same.
 
 const RATE := 22050
+## Recorded sounds: assets/audio/<slot>_01.wav, _02.wav ... (or .ogg). When a slot has files the game
+## picks a random take; otherwise it plays the generated placeholder. Spec: docs/audio.md.
+const SLOTS := {
+	"hurt": "player_hurt", "death": "player_death", "scream": "zombie_scream", "groan": "zombie_groan",
+	"zombie_attack": "zombie_attack", "zombie_death": "zombie_death", "reload": "reload", "click": "empty",
+	"pistol": "pistol", "uzi": "uzi", "rifle": "rifle", "shotgun": "shotgun", "swing": "swing", "hit": "hit",
+	"chop": "chop", "rock": "rock", "build": "build", "craft": "craft", "ping": "ping", "crackle": "crackle",
+	"horn": "horn", "land": "land_vehicle", "crash": "crash", "start": "start",
+	"engine_tike": "engine_tike", "engine_bike": "engine_bike", "rumble": "rumble", "skid": "skid",
+}
+const LOOPS := ["engine_tike", "engine_bike", "rumble", "skid"]
+var recorded := {}      # event name -> Array of streams
 var streams := {}
 var _pool3d: Array[AudioStreamPlayer3D] = []
 var _pool2d: Array[AudioStreamPlayer] = []
@@ -35,6 +47,9 @@ func _ready() -> void:
 	streams.click = _click(2400.0, 0.03)
 	streams.ping = _chirp()
 	streams.craft = _click(600.0, 0.08)
+	streams.reload = streams.click
+	streams.death = streams.hurt
+	_load_recorded()
 	randomize()
 	for i in 24:
 		var p := AudioStreamPlayer3D.new()
@@ -48,22 +63,48 @@ func _ready() -> void:
 		add_child(p)
 		_pool2d.append(p)
 
+func _load_recorded() -> void:
+	for ev in SLOTS:
+		var takes: Array = []
+		for i in range(1, 21):
+			for ext in ["wav", "ogg"]:
+				var path := "res://assets/audio/%s_%02d.%s" % [SLOTS[ev], i, ext]
+				if ResourceLoader.exists(path):
+					var st = load(path)
+					if ev in LOOPS:
+						if st is AudioStreamWAV:
+							st.loop_mode = AudioStreamWAV.LOOP_FORWARD
+							st.loop_end = st.data.size() / 2
+						elif st is AudioStreamOggVorbis:
+							st.loop = true
+					takes.append(st)
+		if not takes.is_empty():
+			recorded[ev] = takes
+	if not recorded.is_empty():
+		print("Recorded sounds: ", recorded.keys())
+
+## A recorded take if there is one, otherwise the generated placeholder.
+func get_stream(name: String) -> AudioStream:
+	if recorded.has(name):
+		return recorded[name].pick_random()
+	return streams.get(name)
+
 func play(name: String, vol_db := 0.0, pitch := 1.0) -> void:
-	if not streams.has(name):
+	if not streams.has(name) and not recorded.has(name):
 		return
 	var p := _pool2d[_i2]
 	_i2 = (_i2 + 1) % _pool2d.size()
-	p.stream = streams[name]
+	p.stream = get_stream(name)
 	p.volume_db = vol_db
 	p.pitch_scale = pitch * randf_range(0.95, 1.05)
 	p.play()
 
 func play3d(name: String, pos: Vector3, vol_db := 0.0, pitch := 1.0) -> void:
-	if not streams.has(name):
+	if not streams.has(name) and not recorded.has(name):
 		return
 	var p := _pool3d[_i3]
 	_i3 = (_i3 + 1) % _pool3d.size()
-	p.stream = streams[name]
+	p.stream = get_stream(name)
 	p.global_position = pos
 	p.volume_db = vol_db
 	p.pitch_scale = pitch * randf_range(0.92, 1.08)

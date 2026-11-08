@@ -13,6 +13,15 @@ How to deliver recorded sounds so they drop straight into the game. Until a file
 - **Loops:** engines and rumble should loop seamlessly (start and end match). 1-3 seconds is plenty.
 - **Recording:** a phone in a quiet room with soft furnishings is fine. Keep 15-30 cm from the mic and don't overload it on screams.
 
+## Status
+- In the game: player_hurt (1 take), zombie_scream (9 takes), reload (2 takes). Originals in `assets/audio/raw/`.
+- Still wanted first: zombie_groan, more player_hurt takes, player_death, zombie_death.
+
+## Delivery tips from the first batch
+- One sound per file is easiest, but several takes in one file with clear pauses (half a second of silence) also work: I cut them apart.
+- Keep peaks below 0 dB. If the recorder shows red, step back from the mic or turn the input down. `player_reload_02` was clipped on about a third of its samples, so it was left out.
+- Any name works as long as the slot is clear (`player_scream_damage` became `player_hurt`).
+
 ## File names
 
 `assets/audio/<slot>_<nn>.wav`, numbered from 01. Example: `zombie_scream_01.wav`, `zombie_scream_02.wav`.
