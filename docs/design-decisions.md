@@ -152,6 +152,14 @@ Repo: https://github.com/Kentpaulsen/SudoFPS. GitHub Pages enabled (Source: GitH
 - Norwegian road markings: yellow dashed centre line (3 m dash, 6 m gap), white solid edge lines, zebra crossings with blue crossing signs outside the supermarket, church and dealership.
 - Buildings: the ground inside every footprint is set just below the floor after all flattening, so no building is ever partly buried.
 
+## v0.6
+- Doors: the church tower has a wooden double door, every house a front door. E opens and closes them. Closed doors block zombies too, so a house is a place to hide (zombies spawned inside stay inside until someone opens up).
+- Bjørn the car dealer stands in the dealership. Talk to him (E) and pick the Tike or the motorbike; it appears at the showroom door. One of each: asking again brings yours back if nobody is driving it. Without a dealership the vehicles are parked near the spawn as before.
+- More roads: up to three extra links make loops in town, and up to three dead-end roads lead out to the coast.
+- Norwegian signs: 50 km/h at both ends of town roads, forkjørsvei, vikeplikt and blindvei on roads out of town, P at parking lots, 30 km/h by the church, gangfelt at crossings.
+- Zombies: jointed bodies (legs, hunched torso, reaching arms, lolling head), walk cycle that follows their speed, limping walkers and about 20% runners, flinch when hit, arm swipe when attacking, glowing eyes, blood and torn clothes, five outfits, varied height. Animation only runs within 70 m.
+- Fix: the church tower door was walled up (stacked openings bug in the Blender wall builder).
+
 ## Recorded sounds (v0.4.1)
 - The game loads `assets/audio/<slot>_<nn>.wav/.ogg` automatically and picks a random take per play; generated sounds stay as fallback. Spec: `docs/audio.md`.
 - First recordings in: player_hurt (1), zombie_scream (9 takes cut from two files), reload (2 parts). Originals kept in `assets/audio/raw/`.

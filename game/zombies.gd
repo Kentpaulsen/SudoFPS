@@ -17,9 +17,8 @@ var _horde_t := 75.0
 var horde_count := 0
 
 func _ready() -> void:
-	meshes = [ZombieScript.build_mesh(Color(0.35, 0.38, 0.45), Color(0.25, 0.22, 0.20)),
-			  ZombieScript.build_mesh(Color(0.50, 0.30, 0.25), Color(0.20, 0.24, 0.30)),
-			  ZombieScript.build_mesh(Color(0.55, 0.53, 0.45), Color(0.30, 0.28, 0.22))]
+	for i in ZombieScript.OUTFITS.size():
+		meshes.append(ZombieScript.build_parts(i))
 	Game.noise.connect(_on_noise)
 	var w = Game.world
 	for ip in w.interior_points():

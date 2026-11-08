@@ -1,16 +1,28 @@
 extends CharacterBody3D
-## One zombie. Asleep (no processing) while idle; the director wakes it on noise or sight.
+## One zombie: jointed low-poly body (legs, hunched torso, reaching arms, lolling head, glowing eyes).
+## Asleep (no processing) while idle; the director wakes it on noise or sight.
+## Walkers limp at different speeds; about one in five is a runner.
 
 enum { IDLE, INVESTIGATE, CHASE, DEAD }
-const SPEED := 4.3
 
 var state := IDLE
 var hp := 100.0
 var target := Vector3.ZERO
 var director: Node
 var visual: Node3D
+var torso: Node3D
+var head: Node3D
+var arm_l: Node3D
+var arm_r: Node3D
+var leg_l: Node3D
+var leg_r: Node3D
+var speed := 3.6
+var runner := false
+var limp := 0.0
 var attack_cd := 0.0
 var stun := 0.0
+var flinch := 0.0
+var swipe := 0.0
 var lost_t := 0.0
 var stuck_t := 0.0
 var side_t := 0.0
@@ -20,7 +32,7 @@ var anim_t := 0.0
 var groan_t := 0.0
 var alerted := false
 
-func setup(mesh: Mesh, d: Node) -> void:
+func setup(parts: Dictionary, d: Node) -> void:
 	director = d
 	collision_layer = Game.L_ZOMBIE
 	collision_mask = Game.L_WORLD | Game.L_STRUCT | Game.L_PLAYER
@@ -33,15 +45,41 @@ func setup(mesh: Mesh, d: Node) -> void:
 	cs.shape = cap
 	cs.position.y = 0.9
 	add_child(cs)
+	runner = randf() < 0.2
+	speed = randf_range(5.0, 5.6) if runner else randf_range(2.8, 3.9)
+	limp = randf_range(0.0, 0.5) if not runner else 0.0
 	visual = Node3D.new()
+	var sc := randf_range(0.92, 1.08)
+	visual.scale = Vector3(sc, sc, sc)
 	add_child(visual)
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.visibility_range_end = 150.0
-	visual.add_child(mi)
+	leg_l = _limb(visual, parts.leg, Vector3(0.1, 0.92, 0))
+	leg_r = _limb(visual, parts.leg, Vector3(-0.1, 0.92, 0))
+	torso = _limb(visual, parts.torso, Vector3(0, 0.92, 0))
+	head = _limb(torso, parts.head, Vector3(0, 0.60, 0.02))
+	arm_l = _limb(torso, parts.arm, Vector3(0.25, 0.50, 0))
+	arm_r = _limb(torso, parts.arm, Vector3(-0.25, 0.50, 0))
 	anim_t = randf() * 10.0
 	groan_t = randf_range(2.0, 9.0)
+	_idle_pose()
 	set_physics_process(false)
+
+func _limb(parent: Node3D, mesh: Mesh, at: Vector3) -> Node3D:
+	var pivot := Node3D.new()
+	pivot.position = at
+	parent.add_child(pivot)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.visibility_range_end = 130.0
+	pivot.add_child(mi)
+	return pivot
+
+func _idle_pose() -> void:
+	torso.rotation = Vector3(-0.35, randf_range(-0.2, 0.2), randf_range(-0.12, 0.12))
+	head.rotation = Vector3(0.5, randf_range(-0.4, 0.4), randf_range(-0.4, 0.4))
+	arm_l.rotation = Vector3(0.25, 0, 0.12)
+	arm_r.rotation = Vector3(0.15, 0, -0.1)
+	leg_l.rotation = Vector3.ZERO
+	leg_r.rotation = Vector3(0.1 * limp, 0, 0)
 
 func chase() -> void:
 	if state == DEAD:
@@ -61,8 +99,8 @@ func go_idle() -> void:
 	state = IDLE
 	alerted = false
 	velocity = Vector3.ZERO
-	visual.rotation = Vector3.ZERO
 	visual.position = Vector3.ZERO
+	_idle_pose()
 	set_physics_process(false)
 
 func _physics_process(dt: float) -> void:
@@ -86,7 +124,7 @@ func _physics_process(dt: float) -> void:
 	if state == INVESTIGATE and d < 2.0:
 		go_idle()
 		return
-	var spd := SPEED if state == CHASE else 1.8
+	var spd := speed if state == CHASE else 1.6
 	if stun > 0.0:
 		stun -= dt
 		spd = 0.0
@@ -96,10 +134,8 @@ func _physics_process(dt: float) -> void:
 		want = Vector3.ZERO
 		if attack_cd <= 0.0 and absf(target.y - global_position.y) < 1.6 and stun <= 0.0:
 			attack_cd = 1.0
+			swipe = 1.0
 			pl.zombie_hit(9.0, 11.0)
-			var tw := create_tween()
-			tw.tween_property(visual, "position:z", -0.35, 0.08)
-			tw.tween_property(visual, "position:z", 0.0, 0.2)
 	var a := minf(7.0 * dt, 1.0)
 	velocity.x = lerpf(velocity.x, want.x, a)
 	velocity.z = lerpf(velocity.z, want.z, a)
@@ -110,7 +146,6 @@ func _physics_process(dt: float) -> void:
 	move_and_slide()
 	if dir.length() > 0.1 and stun <= 0.0:
 		rotation.y = lerp_angle(rotation.y, atan2(-dir.x, -dir.z), minf(8.0 * dt, 1.0))
-	# unstick: sidestep along obstacles
 	if spd > 0.5 and Vector2(velocity.x, velocity.z).length() < 0.6 and d > 1.5:
 		stuck_t += dt
 		if stuck_t > 0.7:
@@ -122,21 +157,45 @@ func _physics_process(dt: float) -> void:
 	side_t -= dt
 	if side_t <= 0.0:
 		side_dir = Vector3.ZERO
-	# shamble
-	anim_t += dt * (6.0 if state == CHASE else 3.0)
-	visual.rotation.z = sin(anim_t) * 0.10
-	visual.rotation.x = -0.12 if state == CHASE else 0.0
-	visual.position.y = absf(sin(anim_t)) * 0.05
+	_animate(dt)
 	groan_t -= dt
 	if groan_t <= 0.0:
 		groan_t = randf_range(4.0, 11.0)
 		if pl and global_position.distance_to(pl.global_position) < 35.0:
 			Sfx.play3d("groan", global_position + Vector3(0, 1.6, 0), -4.0)
 
+## Procedural walk: stride follows actual speed, limping walkers drag one leg, runners pump their arms.
+func _animate(dt: float) -> void:
+	if Game.player and global_position.distance_squared_to(Game.player.global_position) > 70.0 * 70.0:
+		return
+	var v := Vector2(velocity.x, velocity.z).length()
+	anim_t += dt * (2.2 + v * 1.9)
+	var stride := clampf(v / 3.0, 0.0, 1.0) * 0.65
+	var s := sin(anim_t)
+	leg_l.rotation.x = s * stride
+	leg_r.rotation.x = -s * stride * (1.0 - limp) + limp * 0.25
+	visual.position.y = absf(cos(anim_t)) * 0.05 * stride - limp * 0.03 * maxf(s, 0.0)
+	flinch = move_toward(flinch, 0.0, dt * 4.0)
+	swipe = move_toward(swipe, 0.0, dt * 3.5)
+	var lean := -0.25 - (0.25 if runner and state == CHASE else 0.0) + flinch * 0.6
+	torso.rotation = Vector3(lean, sin(anim_t * 0.5) * 0.08, s * 0.06 + limp * 0.1)
+	head.rotation = Vector3(0.25 + sin(anim_t * 0.7) * 0.15, sin(anim_t * 0.3) * 0.3, sin(anim_t * 0.9) * 0.2)
+	if state == CHASE and not runner:
+		# arms up and reaching, a slow flail
+		arm_l.rotation = Vector3(1.35 + sin(anim_t * 1.3) * 0.15 - swipe * 1.2, 0.0, 0.08)
+		arm_r.rotation = Vector3(1.25 + cos(anim_t * 1.1) * 0.15 - swipe * 1.6, 0.0, -0.08)
+	elif state == CHASE:
+		arm_l.rotation = Vector3(-s * 0.9 + 0.3 - swipe * 1.2, 0, 0.1)
+		arm_r.rotation = Vector3(s * 0.9 + 0.3 - swipe * 1.6, 0, -0.1)
+	else:
+		arm_l.rotation = Vector3(0.2 - s * 0.2, 0, 0.12)
+		arm_r.rotation = Vector3(0.2 + s * 0.2, 0, -0.1)
+
 func take_damage(dmg: float, knock: Vector3, _dir: Vector3) -> void:
 	if state == DEAD:
 		return
 	hp -= dmg
+	flinch = 1.0
 	if knock.length() > 0.1:
 		velocity += knock
 		if knock.length() > 5.0:
@@ -153,49 +212,96 @@ func die() -> void:
 	collision_mask = Game.L_WORLD
 	set_physics_process(false)
 	director.on_dead(self)
+	Sfx.play3d("zombie_death", global_position + Vector3(0, 1.2, 0), 0.0)
 	var tw := create_tween()
-	tw.tween_property(visual, "rotation:x", PI / 2.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(visual, "position:y", 0.15, 0.45)
+	tw.tween_property(torso, "rotation", Vector3(0.3, 0.4, 0.2), 0.25)
+	tw.parallel().tween_property(visual, "rotation:x", PI / 2.0, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(visual, "position:y", 0.12, 0.55)
+	tw.parallel().tween_property(arm_l, "rotation", Vector3(2.6, 0.3, 0.6), 0.5)
+	tw.parallel().tween_property(arm_r, "rotation", Vector3(1.8, -0.4, -0.8), 0.5)
+	tw.parallel().tween_property(leg_r, "rotation:x", 0.5, 0.5)
 	tw.tween_interval(4.0)
 	tw.tween_property(visual, "position:y", -1.0, 1.5)
 	tw.tween_callback(queue_free)
 
-## Builds the shared zombie meshes (arms out front, facing -Z, origin at feet).
-static func build_mesh(shirt: Color, pants: Color) -> ArrayMesh:
+# ---------------------------------------------------------------- meshes
+const OUTFITS := [
+	[Color(0.33, 0.37, 0.44), Color(0.22, 0.20, 0.18)],   # grey-blue shirt, brown trousers
+	[Color(0.52, 0.30, 0.24), Color(0.18, 0.22, 0.30)],   # rust shirt, jeans
+	[Color(0.56, 0.54, 0.46), Color(0.28, 0.27, 0.22)],   # dirty white shirt, khaki
+	[Color(0.20, 0.30, 0.22), Color(0.12, 0.12, 0.13)],   # green jacket, black trousers
+	[Color(0.62, 0.22, 0.20), Color(0.30, 0.32, 0.36)],   # red hoodie, grey joggers
+]
+
+## Shared per-outfit meshes: torso (origin at the hips), head (origin at the neck), arm (origin at the
+## shoulder, hanging down), leg (origin at the hip joint, down to the foot). Faces -Z.
+static func build_parts(i: int) -> Dictionary:
+	var shirt: Color = OUTFITS[i % OUTFITS.size()][0]
+	var pants: Color = OUTFITS[i % OUTFITS.size()][1]
+	var skin := Color(0.50, 0.58, 0.44).lerp(Color(0.58, 0.55, 0.47), float(i % 3) / 2.0)
+	var blood := Color(0.32, 0.03, 0.02)
+	var torso := _mesh([
+		[Vector3(0.36, 0.16, 0.21), Vector3(0, 0.02, 0), pants.darkened(0.15)],
+		[Vector3(0.40, 0.50, 0.23), Vector3(0, 0.33, 0.01), shirt],
+		[Vector3(0.18, 0.14, 0.24), Vector3(0.08, 0.14, 0.01), skin.darkened(0.2)],        # torn shirt, belly
+		[Vector3(0.14, 0.18, 0.012), Vector3(-0.09, 0.36, -0.12), blood],                 # blood on the chest
+		[Vector3(0.10, 0.08, 0.012), Vector3(0.11, 0.22, -0.12), blood.lightened(0.1)],
+		[Vector3(0.44, 0.10, 0.25), Vector3(0, 0.55, 0.01), shirt.darkened(0.1)],          # shoulders
+	])
+	var head := _mesh([
+		[Vector3(0.10, 0.10, 0.10), Vector3(0, 0.03, 0), skin.darkened(0.1)],
+		[Vector3(0.23, 0.25, 0.24), Vector3(0, 0.19, -0.02), skin],
+		[Vector3(0.20, 0.07, 0.20), Vector3(0, 0.06, -0.05), skin.darkened(0.15)],          # slack jaw
+		[Vector3(0.12, 0.035, 0.01), Vector3(0, 0.07, -0.152), Color(0.12, 0.03, 0.03)],   # open mouth
+		[Vector3(0.25, 0.06, 0.25), Vector3(0.01, 0.32, 0.0), Color(0.14, 0.11, 0.08)],     # matted hair
+		[Vector3(0.06, 0.05, 0.04), Vector3(0.09, 0.25, -0.13), blood],                    # head wound
+	], [[Vector3(0.045, 0.03, 0.012), Vector3(0.055, 0.2, -0.142)], [Vector3(0.045, 0.03, 0.012), Vector3(-0.055, 0.2, -0.142)]])
+	var arm := _mesh([
+		[Vector3(0.11, 0.34, 0.11), Vector3(0, -0.15, 0), shirt.darkened(0.1)],
+		[Vector3(0.09, 0.30, 0.09), Vector3(0, -0.47, 0), skin],
+		[Vector3(0.10, 0.10, 0.06), Vector3(0, -0.66, -0.01), skin.darkened(0.1)],
+		[Vector3(0.095, 0.08, 0.095), Vector3(0, -0.40, 0), blood],
+	])
+	var leg := _mesh([
+		[Vector3(0.15, 0.46, 0.16), Vector3(0, -0.22, 0), pants],
+		[Vector3(0.13, 0.42, 0.14), Vector3(0, -0.65, 0.01), pants.darkened(0.08)],
+		[Vector3(0.13, 0.08, 0.25), Vector3(0, -0.88, -0.05), Color(0.12, 0.10, 0.08)],
+	])
+	return {"torso": torso, "head": head, "arm": arm, "leg": leg}
+
+## Builds one mesh from boxes; optional glowing boxes (eyes) go in a second, emissive surface.
+static func _mesh(parts: Array, glow := []) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var skin := Color(0.47, 0.58, 0.40)
-	var parts := [
-		[Vector3(0.15, 0.82, 0.16), Vector3(0.10, 0.43, 0.0), pants, 0.0],
-		[Vector3(0.15, 0.82, 0.16), Vector3(-0.10, 0.43, 0.03), pants, 0.0],
-		[Vector3(0.37, 0.16, 0.21), Vector3(0, 0.90, 0), pants.darkened(0.2), 0.0],
-		[Vector3(0.40, 0.52, 0.22), Vector3(0, 1.22, 0.02), shirt, 0.08],
-		[Vector3(0.16, 0.12, 0.23), Vector3(0.09, 1.05, 0.02), skin.darkened(0.15), 0.0],
-		[Vector3(0.10, 0.10, 0.58), Vector3(0.25, 1.40, -0.26), shirt.darkened(0.15), 0.0],
-		[Vector3(0.10, 0.10, 0.58), Vector3(-0.25, 1.36, -0.24), shirt.darkened(0.15), 0.0],
-		[Vector3(0.09, 0.08, 0.14), Vector3(0.25, 1.40, -0.60), skin, 0.0],
-		[Vector3(0.09, 0.08, 0.14), Vector3(-0.25, 1.36, -0.58), skin, 0.0],
-		[Vector3(0.10, 0.10, 0.10), Vector3(0, 1.52, 0.0), skin, 0.0],
-		[Vector3(0.24, 0.26, 0.24), Vector3(0.02, 1.68, -0.04), skin, 0.25],
-		[Vector3(0.05, 0.03, 0.02), Vector3(0.07, 1.71, -0.17), Color(0.75, 0.08, 0.05), 0.25],
-		[Vector3(0.05, 0.03, 0.02), Vector3(-0.03, 1.71, -0.17), Color(0.75, 0.08, 0.05), 0.25],
-		[Vector3(0.12, 0.03, 0.02), Vector3(0.02, 1.61, -0.165), Color(0.15, 0.05, 0.05), 0.25],
-	]
 	for p in parts:
-		_box(st, p[0], p[1], p[2], Basis(Vector3.FORWARD, p[3] * 0.4))
+		_box(st, p[0], p[1], p[2])
 	st.generate_normals()
-	var mesh = st.commit()
+	var mesh := st.commit()
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
 	m.roughness = 0.9
 	mesh.surface_set_material(0, m)
+	if not glow.is_empty():
+		var st2 := SurfaceTool.new()
+		st2.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for g in glow:
+			_box(st2, g[0], g[1], Color(1, 1, 1))
+		st2.generate_normals()
+		st2.commit(mesh)
+		var em := StandardMaterial3D.new()
+		em.albedo_color = Color(0.9, 0.2, 0.1)
+		em.emission_enabled = true
+		em.emission = Color(1.0, 0.25, 0.1)
+		em.emission_energy_multiplier = 2.5
+		em.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mesh.surface_set_material(1, em)
 	return mesh
 
-static func _box(st: SurfaceTool, size: Vector3, c: Vector3, col: Color, b: Basis) -> void:
+static func _box(st: SurfaceTool, size: Vector3, c: Vector3, col: Color) -> void:
 	var h := size / 2.0
 	var v := []
 	for i in 8:
-		v.append(c + b * Vector3(h.x * (1 if i & 1 else -1), h.y * (1 if i & 2 else -1), h.z * (1 if i & 4 else -1)))
+		v.append(c + Vector3(h.x * (1 if i & 1 else -1), h.y * (1 if i & 2 else -1), h.z * (1 if i & 4 else -1)))
 	var faces := [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]]
 	for f in faces:
 		st.set_color(col)

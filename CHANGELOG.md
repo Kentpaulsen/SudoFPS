@@ -1,5 +1,13 @@
 # Change log
 
+## Prototype v0.6.0 (2026-11-08)
+- Church door fixed: the tower entrance was accidentally walled up. It now has a wooden double door.
+- Doors you can open and close with E on the church and every house. Closed doors keep zombies out (and in).
+- Bjørn the car dealer: talk to him in the dealership and choose the Tike or the motorbike. It appears by the big door.
+- More roads: loops in town and dead-end roads out to the coast.
+- Norwegian road signs: 50 and 30 km/h, forkjørsvei, vikeplikt, blindvei, parking.
+- More realistic zombies: they walk with moving legs, hunch forward, reach for you, limp or run, flinch when hit, swipe when they attack, and their eyes glow in the dark.
+
 ## Prototype v0.5.0 (2026-11-08)
 - Pause menu on Esc: Resume, Settings, Controls, Toggle fullscreen, Main menu. Zombie Royale pauses while it is open; Last Standing keeps going.
 - Settings, remembered between sessions: Low/Medium/High quality, render scale, shadows, grass density, view distance, fullscreen, VSync, frame rate limit, volume, field of view, mouse sensitivity, invert mouse, day length, and change any key.

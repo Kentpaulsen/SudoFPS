@@ -8,6 +8,9 @@ var fx_mat: ShaderMaterial
 var craft_panel: PanelContainer
 var death_panel: PanelContainer
 var dev_panel: PanelContainer
+var talk_panel: PanelContainer
+var talk_text: Label
+var talk_buttons: VBoxContainer
 var msgs: Array = []          # [text, color, time]
 var show_help := false
 var show_stats := true
@@ -50,6 +53,7 @@ void fragment() {
 	_make_craft_panel()
 	_make_death_panel()
 	_make_dev_panel()
+	_make_talk_panel()
 	Game.message.connect(func(t, c): msgs.append([t, c, Time.get_ticks_msec() / 1000.0]))
 
 func _make_craft_panel() -> void:
@@ -79,6 +83,49 @@ func _make_craft_panel() -> void:
 	box.add_child(close)
 	craft_panel.visible = false
 	add_child(craft_panel)
+
+func _make_talk_panel() -> void:
+	talk_panel = PanelContainer.new()
+	talk_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	talk_panel.custom_minimum_size = Vector2(620, 0)
+	talk_panel.offset_left = -310
+	talk_panel.offset_right = 310
+	talk_panel.offset_top = -280
+	talk_panel.offset_bottom = -40
+	talk_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	talk_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	talk_panel.add_child(box)
+	talk_text = Label.new()
+	talk_text.autowrap_mode = TextServer.AUTOWRAP_WORD
+	talk_text.add_theme_font_size_override("font_size", 18)
+	box.add_child(talk_text)
+	talk_buttons = VBoxContainer.new()
+	box.add_child(talk_buttons)
+	talk_panel.visible = false
+	add_child(talk_panel)
+
+## Dialogue with Bjørn: pick the Tike or the motorbike and it appears in the showroom.
+func _show_talk(n) -> void:
+	for c in talk_buttons.get_children():
+		c.queue_free()
+	talk_text.text = "%s (car dealer):\n\"Hei! You're the first customer since the dead started walking. Everything here is free now. What do you fancy?\"" % n.npc_name
+	for opt in [["The Tike  (tough little 4x4, 54 km/h)", "tike"], ["The motorbike  (fast, leans in the turns, 68 km/h)", "bike"], ["Nothing, thanks. Bye!", ""]]:
+		var b := Button.new()
+		b.text = opt[0]
+		b.custom_minimum_size = Vector2(0, 42)
+		b.pressed.connect(_choose.bind(n, opt[1]))
+		talk_buttons.add_child(b)
+
+func _choose(n, kind: String) -> void:
+	if kind == "":
+		Game.player.end_talk()
+		return
+	Game.world.give_vehicle(kind)
+	Game.msg("%s: \"Good choice! It's waiting by the big door. Mind the zombies.\"" % n.npc_name, Color(1, 0.9, 0.6))
+	Sfx.play("craft")
+	Game.player.end_talk()
 
 func _make_dev_panel() -> void:
 	dev_panel = PanelContainer.new()
@@ -156,6 +203,9 @@ func _process(dt: float) -> void:
 	craft_panel.visible = pl.craft_open
 	death_panel.visible = pl.dead
 	dev_panel.visible = pl.dev_open
+	if pl.talk_open and not talk_panel.visible:
+		_show_talk(pl.talk_npc)
+	talk_panel.visible = pl.talk_open
 	# screen effects
 	var amount = clampf((pl.zomb - 40.0) / 60.0, 0.0, 1.0) if Game.zombies_enabled else 0.0
 	var tint := Color(0, 0, 0, 0)
@@ -224,8 +274,8 @@ func _paint() -> void:
 	if pl.vehicle:
 		_text(Vector2(0, vs.y - 110), "%d km/h" % roundi(absf(pl.vehicle.speed) * 3.6), 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
 		_text(Vector2(0, vs.y - 84), "G horn    E get out    V camera (test key until the camera stick exists)", 14, Color(0.85, 0.85, 0.85), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
-	elif pl.near_vehicle:
-		_text(Vector2(0, c.y + 60), "E  drive the %s" % ("Tike" if pl.near_vehicle.kind == "tike" else "Bike"), 20, Color(1, 0.95, 0.7), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
+	elif pl.interact_label != "" and not pl.talk_open:
+		_text(Vector2(0, c.y + 60), "E  " + pl.interact_label, 20, Color(1, 0.95, 0.7), HORIZONTAL_ALIGNMENT_CENTER, vs.x)
 	if pl.wheel_open:
 		_wheel(c, pl)
 	# minimap and sector
@@ -265,7 +315,7 @@ func _paint() -> void:
 	# overlays
 	if show_help:
 		_panel_text(c, Game.HELP_TEXT)
-	elif not pl.captured() and not pl.dead and not pl.craft_open and not pl.dev_open and not Game.smoke and not Game.menu_open:
+	elif not pl.captured() and not pl.dead and not pl.craft_open and not pl.dev_open and not pl.talk_open and not Game.smoke and not Game.menu_open:
 		canvas.draw_rect(Rect2(Vector2.ZERO, vs), Color(0, 0, 0, 0.45))
 		_text(Vector2(0, c.y - 150), "CLICK TO PLAY", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, vs.x)
 		_panel_text(c + Vector2(0, 40), Game.HELP_TEXT)

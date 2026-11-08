@@ -42,20 +42,24 @@ class Kit:
             c = a + u * ((s0 + s1) / 2)
             size = (s1 - s0, t, z_hi - z_lo) if along_x else (t, s1 - s0, z_hi - z_lo)
             self.box(size, (c.x, c.y, z0 + (z_lo + z_hi) / 2), mi)
-        cur = 0.0
-        for off, w, bot, top in sorted(openings):
-            s0, s1 = off - w / 2, off + w / 2
-            put(cur, s0, 0, h)
-            put(s0, s1, 0, bot)
-            put(s0, s1, top, h)
-            if trim is not None:   # frame around the opening
+        # columns between every opening edge; in each column, fill the height outside the openings
+        # covering it. This allows openings stacked above each other (door + belfry window).
+        edges = sorted({0.0, L} | {max(0.0, min(L, o - w / 2)) for o, w, _, _ in openings} | {max(0.0, min(L, o + w / 2)) for o, w, _, _ in openings})
+        for s0, s1 in zip(edges[:-1], edges[1:]):
+            mid = (s0 + s1) / 2
+            holes = sorted((bot, top) for o, w, bot, top in openings if o - w / 2 < mid < o + w / 2)
+            z = 0.0
+            for bot, top in holes:
+                put(s0, s1, z, bot)
+                z = max(z, top)
+            put(s0, s1, z, h)
+        if trim is not None:   # frame around each opening
+            for off, w, bot, top in openings:
                 c = a + u * off
                 fs = (w + 0.12, t + 0.04, 0.08) if along_x else (t + 0.04, w + 0.12, 0.08)
                 self.m.box(fs, (c.x, c.y, z0 + top + 0.04), trim)
                 if bot > 0.05:
                     self.m.box(fs, (c.x, c.y, z0 + bot - 0.04), trim)
-            cur = s1
-        put(cur, L, 0, h)
 
     def roof_hull(self, pts, mi, col=True):
         self.m.hull(pts, mi)

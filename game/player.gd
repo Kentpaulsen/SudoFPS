@@ -63,6 +63,11 @@ var ping_t := 0.0
 
 var vehicle = null
 var near_vehicle = null
+var interact_target = null
+var interact_kind := ""
+var interact_label := ""
+var talk_open := false
+var talk_npc = null
 var third_person := false
 var sprinting := false
 var _vyaw := 0.0
@@ -126,7 +131,7 @@ func captured() -> bool:
 	return Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 func ui_blocking() -> bool:
-	return craft_open or dead or dev_open or Game.menu_open
+	return craft_open or dead or dev_open or Game.menu_open or talk_open
 
 # ---------------------------------------------------------------- input
 func _unhandled_input(event: InputEvent) -> void:
@@ -247,19 +252,16 @@ func _actions(cap: bool) -> void:
 		return
 	if Input.is_action_just_pressed("map"):
 		map_open = not map_open
-	near_vehicle = null
-	if vehicle == null:
-		var best := 3.2
-		for v in Game.world.vehicles:
-			var d: float = v.global_position.distance_to(global_position)
-			if d < best:
-				best = d
-				near_vehicle = v
+	_find_interact()
 	if Input.is_action_just_pressed("interact"):
 		if vehicle:
 			exit_vehicle()
-		elif near_vehicle:
-			enter_vehicle(near_vehicle)
+		elif interact_kind == "vehicle":
+			enter_vehicle(interact_target)
+		elif interact_kind == "door":
+			interact_target.toggle()
+		elif interact_kind == "npc":
+			talk_to(interact_target)
 	if Input.is_action_just_pressed("camera") and vehicle:
 		third_person = not third_person
 		if driver_body:
@@ -689,6 +691,51 @@ func _make_driver_body() -> Node3D:
 		mi.position = prt[1]
 		root.add_child(mi)
 	return root
+
+## The nearest thing E can use: a vehicle, a door or Bjørn.
+func _find_interact() -> void:
+	interact_target = null
+	interact_kind = ""
+	interact_label = ""
+	near_vehicle = null
+	if vehicle:
+		return
+	var best := INF
+	var w = Game.world
+	for v in w.vehicles:
+		var d: float = v.global_position.distance_to(global_position)
+		if d < 3.2 and d < best:
+			best = d
+			interact_target = v
+			interact_kind = "vehicle"
+			interact_label = "drive the %s" % ("Tike" if v.kind == "tike" else "motorbike")
+	for door in w.doors:
+		var d: float = door.centre().distance_to(global_position + Vector3(0, 1.0, 0))
+		if d < 2.3 and d < best:
+			best = d
+			interact_target = door
+			interact_kind = "door"
+			interact_label = "close the door" if door.open else "open the door"
+	if w.npc:
+		var d: float = w.npc.global_position.distance_to(global_position)
+		if d < 3.0 and d < best:
+			best = d
+			interact_target = w.npc
+			interact_kind = "npc"
+			interact_label = "talk to %s" % w.npc.npc_name
+	if interact_kind == "vehicle":
+		near_vehicle = interact_target
+
+func talk_to(n) -> void:
+	talk_open = true
+	talk_npc = n
+	n.wave()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func end_talk() -> void:
+	talk_open = false
+	talk_npc = null
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 func enter_vehicle(v) -> void:
 	vehicle = v

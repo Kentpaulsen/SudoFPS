@@ -17,6 +17,8 @@ var vehicles: Array = []
 var sites: Array = []          # buildings: {kind, pos, rot, half}
 var ramps: Array = []
 var lamps: Array = []          # [OmniLight3D]
+var doors: Array = []
+var npc: Node3D
 var lamp_mat: StandardMaterial3D
 var lamps_on := false
 var sun: DirectionalLight3D
@@ -537,6 +539,7 @@ func _plan_roads() -> void:
 	rng.seed = seed_value + 611
 	var linked := [0]
 	var bad := {}
+	var links := {}
 	while linked.size() < n:
 		var best := INF
 		var bi := -1
@@ -556,12 +559,46 @@ func _plan_roads() -> void:
 		if path.is_empty():
 			bad[Vector2i(bi, bj)] = true
 			continue
-		roads.append({"pts": path, "w": ROAD_W})
+		roads.append({"pts": path, "w": ROAD_W, "kind": "link"})
+		links[Vector2i(mini(bi, bj), maxi(bi, bj))] = true
 		linked.append(bj)
+	# a few extra links so the town has loops
+	var extra := 0
+	for i in n:
+		for j in range(i + 1, n):
+			if extra >= 3 or links.has(Vector2i(i, j)):
+				continue
+			if pts[i].distance_to(pts[j]) < 85.0 and rng.randf() < 0.45:
+				var path := _route(pts[i], pts[j], rng)
+				if not path.is_empty():
+					roads.append({"pts": path, "w": ROAD_W, "kind": "link"})
+					links[Vector2i(i, j)] = true
+					extra += 1
+	# roads out of town to the coast (dead ends)
+	var centre: Vector2 = pts[0]
+	var outs := 0
+	for t in 60:
+		if outs >= 3:
+			break
+		var a := rng.randf() * TAU
+		var far := centre + Vector2(cos(a), sin(a)) * rng.randf_range(110.0, 165.0)
+		if _raw_h(far.x, far.y) < 2.5 or _raw_h(far.x, far.y) > 12.0:
+			continue
+		var from_i := 0
+		var best := INF
+		for i in n:
+			var dd: float = pts[i].distance_to(far)
+			if dd < best:
+				best = dd
+				from_i = i
+		var path := _route(pts[from_i], far, rng)
+		if not path.is_empty():
+			roads.append({"pts": path, "w": ROAD_W, "kind": "out"})
+			outs += 1
 	# driveways from each link point to the entrance
 	for st in sites:
 		var w := 4.0 if st.kind == "house" else ROAD_W
-		roads.append({"pts": PackedVector2Array([st.connect, st.door]), "w": w})
+		roads.append({"pts": PackedVector2Array([st.connect, st.door]), "w": w, "kind": "drive", "site": st.kind})
 	for rd in roads:
 		_index_road(rd)
 		_flatten_road(rd)
@@ -660,6 +697,13 @@ func _town() -> void:
 		var xf := Transform3D(Basis(Vector3.UP, st.rot * PI / 2.0), st.pos)
 		var root := Game.place_static(d, xf, self, Game.L_WORLD, 280.0)
 		st["node"] = root
+		_doors_for(st)
+		if st.kind == "dealership":
+			npc = StaticBody3D.new()
+			npc.set_script(load("res://game/npc.gd"))
+			add_child(npc)
+			npc.setup()
+			npc.global_transform = Transform3D(Basis(Vector3.UP, st.rot * PI / 2.0), st.pos + Basis(Vector3.UP, st.rot * PI / 2.0) * Vector3(-6.5, 0, -0.5))
 		if st.kind == "house":
 			var wall: Color = HOUSE_COLOURS[rng.randi() % HOUSE_COLOURS.size()]
 			var roof: Color = ROOF_COLOURS[rng.randi() % ROOF_COLOURS.size()]
@@ -677,6 +721,56 @@ func _town() -> void:
 		if st.park != null:
 			_parking(st, b, asphalt, paint, rng)
 	_road_meshes(asphalt, paint)
+	_road_signs()
+
+## Hinged doors: double doors in the church tower, a front door on every house.
+func _doors_for(st: Dictionary) -> void:
+	var specs: Array = []   # [hinge position (local), leaf width, height, swing side, wood colour]
+	match st.kind:
+		"church": specs = [[Vector3(-0.8, 0, 12.2), 0.8, 3.0, 1.0, Color(0.36, 0.20, 0.10)],
+						   [Vector3(0.8, 0, 12.2), 0.8, 3.0, -1.0, Color(0.36, 0.20, 0.10)]]
+		"house": specs = [[Vector3(-0.5, 0, 3.375), 1.0, 2.1, 1.0, Color(0.45, 0.30, 0.18)]]
+	var b := Basis(Vector3.UP, st.rot * PI / 2.0)
+	for sp in specs:
+		var frame := Node3D.new()
+		add_child(frame)
+		frame.global_transform = Transform3D(b, st.pos + b * (sp[0] as Vector3))
+		var d := StaticBody3D.new()
+		d.set_script(load("res://game/door.gd"))
+		frame.add_child(d)
+		d.setup(sp[1], sp[2], sp[3], sp[4])
+		doors.append(d)
+
+## Bjørn hands out vehicles. One of each kind: asking again brings it back to the showroom.
+func give_vehicle(kind: String) -> Node3D:
+	var dealer = site_of("dealership")
+	var marks: Dictionary = Game.asset(BUILDINGS.dealership.glb).markers if dealer else {}
+	var mark := "SPAWN_TIKE" if kind == "tike" else "SPAWN_BIKE"
+	var p := Vector3.ZERO
+	var yaw := 0.0
+	if dealer and marks.has(mark):
+		var b := Basis(Vector3.UP, dealer.rot * PI / 2.0)
+		p = dealer.pos + b * (marks[mark] as Transform3D).origin + Vector3(0, 0.15, 0)
+		yaw = dealer.rot * PI / 2.0
+	else:
+		p = player.global_position + Vector3(4, 0.5, 0)
+		p.y = height_at(p.x, p.z) + 0.3
+	for v in vehicles:
+		if v.kind == kind and v.driver == null:
+			v.global_position = p
+			v.rotation = Vector3(0, yaw, 0)
+			v.speed = 0.0
+			v.velocity = Vector3.ZERO
+			return v
+	var glb := "res://assets/glb/vehicle_tike.glb" if kind == "tike" else "res://assets/glb/vehicle_bike.glb"
+	var v := CharacterBody3D.new()
+	v.set_script(load("res://game/vehicle.gd"))
+	add_child(v)
+	v.setup(glb, kind)
+	v.global_position = p
+	v.rotation.y = yaw
+	vehicles.append(v)
+	return v
 
 func _parking(st: Dictionary, b: Dictionary, asphalt: Material, paint: Material, rng: RandomNumberGenerator) -> void:
 	var r: Rect2 = st.park
@@ -779,6 +873,123 @@ func _road_meshes(asphalt: Material, paint: Material) -> void:
 		mi.material_override = pair[1]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
+
+## Norwegian signs: 50 km/h at the ends of town roads, forkjørsvei, vikeplikt and blindvei on the roads out
+## of town, parking signs at the lots, 30 km/h by the church.
+func _road_signs() -> void:
+	var flip := false
+	for rd in roads:
+		var p: PackedVector2Array = rd.pts
+		if p.size() < 6:
+			continue
+		var hw: float = rd.w / 2.0
+		var kind: String = rd.get("kind", "")
+		for end in [0, 1]:
+			var a: Vector2 = p[0] if end == 0 else p[p.size() - 1]
+			var nxt: Vector2 = p[2] if end == 0 else p[p.size() - 3]
+			var d := (nxt - a).normalized()           # direction of travel into the road
+			var right := Vector2(-d.y, d.x)
+			var at := a + d * 11.0 + right * (hw + 0.8)
+			if kind == "link":
+				_road_sign(at, -d, "priority" if flip and end == 0 else "speed50")
+			elif kind == "out" and end == 0:
+				_road_sign(at, -d, "deadend")
+				_road_sign(a + d * 11.0 - right * (hw + 0.8), d, "yield")
+			elif kind == "out" and end == 1:
+				_road_sign(at, -d, "speed50")
+		flip = not flip
+	for st in sites:
+		if st.park != null:
+			var d: Vector2 = (st.door - st.connect).normalized()
+			_road_sign(st.connect + Vector2(-d.y, d.x) * 3.8, -d, "parking")
+		if st.kind == "church":
+			var d2: Vector2 = (st.connect - st.door).normalized()
+			_road_sign(st.connect + d2 * 4.0 + Vector2(-d2.y, d2.x) * 4.0, -d2, "speed30")
+
+func _road_sign(pos: Vector2, facing: Vector2, kind: String) -> void:
+	if height_at(pos.x, pos.y) < 0.5 or in_site(pos.x, pos.y, -0.3):
+		return
+	var root := StaticBody3D.new()
+	root.collision_layer = Game.L_WORLD
+	add_child(root)
+	root.global_position = Vector3(pos.x, height_at(pos.x, pos.y), pos.y)
+	root.rotation.y = atan2(facing.x, facing.y)
+	var grey := StandardMaterial3D.new()
+	grey.albedo_color = Color(0.6, 0.6, 0.62)
+	grey.metallic = 0.6
+	_part(root, CylinderMesh.new(), Vector3(0.05, 2.3, 0.05), Vector3(0, 1.15, 0), grey)
+	var cs := CollisionShape3D.new()
+	var cyl := CylinderShape3D.new()
+	cyl.radius = 0.08
+	cyl.height = 2.3
+	cs.shape = cyl
+	cs.position.y = 1.15
+	root.add_child(cs)
+	var y := 2.35
+	match kind:
+		"speed50", "speed30":
+			_disc(root, 0.34, Vector3(0, y, 0.0), Color(0.80, 0.08, 0.06))
+			_disc(root, 0.27, Vector3(0, y, 0.012), Color(0.95, 0.95, 0.95))
+			_label(root, "50" if kind == "speed50" else "30", Vector3(0, y, 0.03), 46, Color(0.05, 0.05, 0.05))
+		"priority":
+			var w := _part(root, BoxMesh.new(), Vector3(0.5, 0.5, 0.03), Vector3(0, y, 0), _flat(Color(0.95, 0.95, 0.95)))
+			w.rotation.z = PI / 4.0
+			var yl := _part(root, BoxMesh.new(), Vector3(0.36, 0.36, 0.03), Vector3(0, y, 0.01), _flat(Color(0.98, 0.78, 0.05)))
+			yl.rotation.z = PI / 4.0
+		"yield":
+			_tri(root, 0.42, Vector3(0, y, 0.0), Color(0.80, 0.08, 0.06), true)
+			_tri(root, 0.31, Vector3(0, y + 0.03, 0.012), Color(0.95, 0.95, 0.95), true)
+		"deadend":
+			_part(root, BoxMesh.new(), Vector3(0.6, 0.6, 0.03), Vector3(0, y, 0), _flat(Color(0.05, 0.25, 0.65)))
+			_part(root, BoxMesh.new(), Vector3(0.1, 0.38, 0.01), Vector3(0, y - 0.07, 0.02), _flat(Color(0.95, 0.95, 0.95)))
+			_part(root, BoxMesh.new(), Vector3(0.3, 0.1, 0.01), Vector3(0, y + 0.15, 0.02), _flat(Color(0.80, 0.08, 0.06)))
+		"parking":
+			_part(root, BoxMesh.new(), Vector3(0.6, 0.6, 0.03), Vector3(0, y, 0), _flat(Color(0.05, 0.25, 0.65)))
+			_label(root, "P", Vector3(0, y, 0.02), 56, Color(0.97, 0.97, 0.97))
+
+func _flat(c: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = c
+	return m
+
+func _disc(root: Node3D, r: float, pos: Vector3, c: Color) -> void:
+	var cm := CylinderMesh.new()
+	cm.top_radius = r
+	cm.bottom_radius = r
+	cm.height = 0.02
+	cm.radial_segments = 24
+	cm.material = _flat(c)
+	var mi := MeshInstance3D.new()
+	mi.mesh = cm
+	mi.position = pos
+	mi.rotation.x = PI / 2.0
+	root.add_child(mi)
+
+func _tri(root: Node3D, r: float, pos: Vector3, c: Color, down: bool) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var k := -1.0 if down else 1.0
+	for v in [Vector3(-r, 0.3 * r * k, 0), Vector3(r, 0.3 * r * k, 0), Vector3(0, -0.9 * r * k, 0)]:
+		st.set_normal(Vector3.BACK)
+		st.add_vertex(v)
+	var mi := MeshInstance3D.new()
+	mi.mesh = st.commit()
+	var m := _flat(c)
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.material_override = m
+	mi.position = pos
+	root.add_child(mi)
+
+func _label(root: Node3D, text: String, pos: Vector3, size: int, c: Color) -> void:
+	var l := Label3D.new()
+	l.text = text
+	l.font_size = size
+	l.pixel_size = 0.006
+	l.modulate = c
+	l.outline_size = 0
+	l.double_sided = false
+	l.position = pos
+	root.add_child(l)
 
 func _yellow_mat() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
@@ -1540,28 +1751,13 @@ func _grass_mesh() -> ArrayMesh:
 	return mesh
 
 # ---------------------------------------------------------------- props
-## The Tike and Bike wait inside the abandoned dealership, facing out of the big opening.
+## With a dealership the vehicles come from Bjørn; without one they are parked near the spawn.
 func _vehicles(spawn: Vector3) -> void:
 	var dealer = site_of("dealership")
-	var marks: Dictionary = Game.asset(BUILDINGS.dealership.glb).markers if dealer else {}
-	var specs := [["res://assets/glb/vehicle_tike.glb", "tike", "SPAWN_TIKE", Vector3(5, 0, -4)],
-				  ["res://assets/glb/vehicle_bike.glb", "bike", "SPAWN_BIKE", Vector3(8, 0, -1)]]
-	for sp in specs:
-		var p: Vector3 = spawn + sp[3]
-		var yaw := 2.4
-		if dealer and marks.has(sp[2]):
-			var b := Basis(Vector3.UP, dealer.rot * PI / 2.0)
-			p = dealer.pos + b * (marks[sp[2]] as Transform3D).origin
-			yaw = dealer.rot * PI / 2.0
-			p.y = dealer.pos.y + 0.15
-		else:
-			p.y = height_at(p.x, p.z) + 0.2
-		var v := CharacterBody3D.new()
-		v.set_script(load("res://game/vehicle.gd"))
-		add_child(v)
-		v.setup(sp[0], sp[1])
-		v.global_position = p
-		v.rotation.y = yaw
-		vehicles.append(v)
 	if dealer:
-		Game.msg("The Tike and the Bike are in the old car dealership at %s" % Game.sector(dealer.pos), Color(1, 0.9, 0.6))
+		Game.msg("Bjørn at the old car dealership (%s) has a Tike and a motorbike for you" % Game.sector(dealer.pos), Color(1, 0.9, 0.6))
+		return
+	for kind in ["tike", "bike"]:
+		var v := give_vehicle(kind)
+		v.global_position = spawn + (Vector3(5, 0.3, -4) if kind == "tike" else Vector3(8, 0.3, -1))
+		v.global_position.y = height_at(v.global_position.x, v.global_position.z) + 0.2

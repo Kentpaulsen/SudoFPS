@@ -87,7 +87,7 @@ func resume() -> void:
 
 func _process(_dt: float) -> void:
 	var pl = Game.player
-	if Game.smoke or pl == null or Game.menu_open or pl.dead or pl.craft_open or pl.dev_open:
+	if Game.smoke or pl == null or Game.menu_open or pl.dead or pl.craft_open or pl.dev_open or pl.talk_open:
 		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		open_menu()

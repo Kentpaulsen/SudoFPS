@@ -21,6 +21,8 @@ func _look_at(p: Vector3) -> void:
 	var d: Vector3 = p - pl.head.global_position
 	pl.yaw = atan2(-d.x, -d.z)
 	pl.pitch = atan2(d.y, Vector2(d.x, d.z).length())
+	pl.rotation.y = pl.yaw
+	pl.head.rotation.x = pl.pitch
 
 func _shot(name: String) -> void:
 	if shots == "" or DisplayServer.get_name() == "headless":
@@ -40,6 +42,11 @@ func _process(dt: float) -> void:
 		return
 	if step == 0 and t > 1.0:
 		step = 1
+		w.give_vehicle("tike")
+		w.give_vehicle("bike")
+		if w.doors.size() > 0:
+			w.doors[0].toggle()
+		print("SMOKE vehicles=", w.vehicles.size(), " doors=", w.doors.size(), " npc=", w.npc != null)
 		var tike = w.vehicles[0]
 		if tike:
 			_look_at(tike.global_position + Vector3(0, 0.6, 0))
@@ -196,39 +203,41 @@ func _quick() -> void:
 	var w = Game.world
 	if pl == null:
 		return
+	pl.set_physics_process(false)
 	if step == 0 and t > 1.0:
 		step = 1
-		var rd = w.roads[0]
-		var p: PackedVector2Array = rd.pts
-		var a: Vector2 = p[p.size() / 2]
-		var b: Vector2 = p[mini(p.size() / 2 + 6, p.size() - 1)]
-		pl.set_physics_process(false)
-		pl.global_position = Vector3(a.x, w.height_at(a.x, a.y) + 0.2, a.y)
-		_look_at(Vector3(b.x, w.height_at(b.x, b.y) + 0.6, b.y))
+		var n = w.npc
+		var b: Basis = n.global_transform.basis
+		pl.global_position = n.global_position + b * Vector3(0.6, 0, 2.6)
+		_look_at(n.global_position + Vector3(0, 1.5, 0))
 		pl.equip(4)
+		pl.talk_to(n)
 	elif step == 1 and t > 2.5:
 		step = 2
-		_shot("20_road")
-		for st in w.sites:
-			if st.kind == "supermarket":
-				var dir: Vector2 = (st.door - st.connect).normalized()
-				var c: Vector2 = st.connect - dir * 3.0
-				pl.global_position = Vector3(c.x, w.height_at(c.x, c.y) + 0.2, c.y)
-				var tgt: Vector2 = st.connect + (st.connect - st.door).normalized() * 12.0
-				_look_at(Vector3(tgt.x, w.height_at(tgt.x, tgt.y) - 1.0, tgt.y))
+		_shot("30_npc")
+		pl.end_talk()
+		var ch = w.site_of("church")
+		var b := Basis(Vector3.UP, ch.rot * PI / 2.0)
+		pl.global_position = ch.pos + b * Vector3(1.5, 0.1, 19.0)
+		_look_at(ch.pos + b * Vector3(0, 3.0, 12.0))
 	elif step == 2 and t > 4.0:
 		step = 3
-		_shot("21_crossing")
-		for c in w.get_children():
-			if c.has_method("open_menu"):
-				menu = c
-		menu.open_menu()
-	elif step == 3 and t > 5.0:
+		_shot("31_church")
+		w.doors[0].toggle()
+		w.doors[1].toggle()
+	elif step == 3 and t > 6.0:
 		step = 4
-		_shot("22_menu")
-		menu.panel.visible = false
-		menu.settings.visible = true
-	elif step == 4 and t > 6.0:
-		_shot("23_settings")
+		_shot("32_church_open")
+		if w.director:
+			w.director.clear_all()
+			for k in 7:
+				var a := -0.6 + k * 0.2
+				var fwd: Vector3 = -pl.global_transform.basis.z
+				var p: Vector3 = pl.global_position + fwd.rotated(Vector3.UP, a) * (5.0 + k % 3 * 2.0)
+				p.y = w.height_at(p.x, p.z)
+				w.director.spawn(p, true)
+	elif step == 4 and t > 7.6:
+		step = 5
+		_shot("33_zombies")
 		print("SMOKE ok")
 		get_tree().quit()
